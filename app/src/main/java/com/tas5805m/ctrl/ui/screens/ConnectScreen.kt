@@ -28,7 +28,7 @@ fun ConnectScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 
     LazyColumn(modifier = modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Card(Modifier = Modifier.fillMaxWidth()) {
+            Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text(
                         if (state.connected) "Terhubung" else "Tidak terhubung",
