@@ -34,11 +34,15 @@ fun SendSlider(
     throttleMs: Long = 150L,
     enabled: Boolean = true,
     colors: androidx.compose.material3.SliderColors = SliderDefaults.colors(),
+    /** Pembulatan nilai yang benar-benar dikirim (mis. ke Int); dipakai untuk membuang kiriman ganda. */
+    snap: (Float) -> Float = { it },
 ) {
     var local by remember { mutableStateOf<Float?>(null) }
     var dragging by remember { mutableStateOf(false) }
     var release by remember { mutableIntStateOf(0) }
     val lastSent = remember { LongArray(1) }
+    // Nilai terakhir yang benar-benar dikirim: cegah kirim ganda (mis. throttle lalu "dilepas" di nilai yang sama).
+    var lastValue by remember { mutableStateOf<Float?>(null) }
 
     LaunchedEffect(release) {
         if (release > 0) {
@@ -54,15 +58,18 @@ fun SendSlider(
             local = v
             if (live) {
                 val now = System.currentTimeMillis()
-                if (now - lastSent[0] >= throttleMs) {
+                val sv = snap(v)
+                if (now - lastSent[0] >= throttleMs && sv != lastValue) {
                     lastSent[0] = now
+                    lastValue = sv
                     onSend(v)
                 }
             }
         },
         onValueChangeFinished = {
             dragging = false
-            local?.let { onSend(it) }
+            local?.let { if (snap(it) != lastValue) onSend(it) }
+            lastValue = null
             release++
         },
         valueRange = valueRange,
@@ -94,5 +101,6 @@ fun SendSliderInt(
         live = live,
         throttleMs = throttleMs,
         enabled = enabled,
+        snap = { it.roundToInt().toFloat() },
     )
 }
