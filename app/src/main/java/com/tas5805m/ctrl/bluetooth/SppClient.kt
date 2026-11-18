@@ -11,6 +11,7 @@ import com.tas5805m.ctrl.data.AmpState
 import com.tas5805m.ctrl.data.Diagnosis
 import com.tas5805m.ctrl.data.LineParser
 import com.tas5805m.ctrl.data.Preset
+import com.tas5805m.ctrl.data.PresetTools
 import com.tas5805m.ctrl.data.VoiceParams
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -199,7 +200,12 @@ class SppClient(private val context: Context) {
     fun wsubUnpairAll() = send("wsub_unpair_all")
     fun wsubTrim(ms: Int) = send("wsub_trim ${ms.coerceIn(-60, 100)}")
     fun wsubDiagReset() = send("wsub_diag_reset")
-    fun setVoice(v: VoiceParams) = send(v.command())
+    fun setVoice(v: VoiceParams) {
+        // Optimistis: UI memegang v terbaru sebelum firmware membalas `WSUBV`. Tanpa ini slider kedua yang digeser
+        // sebelum balasan tiba memakai v basi dan mengembalikan nilai slider pertama di firmware.
+        _state.update { it.copy(voice = v) }
+        send(v.command())
+    }
 
     // ---- v3.11: DSP lanjutan & diagnosa ------------------------------------
     fun setClip(gain: Int, l: Int, r: Int) = send("clipset ${gain.coerceIn(-300, 0)} ${l.coerceIn(0, 300)} ${r.coerceIn(0, 300)}")
@@ -234,9 +240,25 @@ class SppClient(private val context: Context) {
         if (c.isNotEmpty()) send(c)
     }
 
-    suspend fun applyPreset(p: Preset) {
-        if (p.kind == "eq") { applyEqOnly(p); return }
-        if (p.kind == "voice") { applyVoiceOnly(p); return }
+    /**
+     * Terapkan preset. Mengembalikan null bila semua perintah diterima firmware, atau ringkasan singkat bila ada
+     * balasan `ERR` selama proses (mis. mode terkunci, perintah tak dikenal di firmware lama).
+     */
+    suspend fun applyPreset(p: Preset): String? {
+        val errBefore = _state.value.errCount
+        when (p.kind) {
+            "eq" -> applyEqOnly(p)
+            "voice" -> applyVoiceOnly(p)
+            "scene" -> applyScene(p)
+            else -> applyFull(p)
+        }
+        delay(250)   // beri waktu balasan terakhir tiba sebelum menghitung ERR
+        val st = _state.value
+        val n = st.errCount - errBefore
+        return if (n > 0) "$n perintah ditolak firmware (terakhir: ${st.lastError.removePrefix("ERR").trim().ifEmpty { "?" }})" else null
+    }
+
+    private suspend fun applyFull(p: Preset) {
         val st = _state.value
         // Mode hanya dikirim bila firmware mau menerimanya (master nirkabel terkunci mode 4, env 1-chip tanpa mode 1/3)
         var mode = st.mode
@@ -257,17 +279,7 @@ class SppClient(private val context: Context) {
             setMixer("ll", p.ll); setMixer("lr", p.lr)
             setMixer("rl", p.rl); setMixer("rr", p.rr)
         }
-        val linked = p.eqLeft == p.eqRight
-        for (i in 0 until 15) {
-            if (lockEq && i <= 2) continue
-            if (linked) {
-                setEqBand("b", i, p.eqLeft.getOrElse(i) { 0f })
-            } else {
-                setEqBand("l", i, p.eqLeft.getOrElse(i) { 0f })
-                setEqBand("r", i, p.eqRight.getOrElse(i) { 0f })
-            }
-            delay(28)
-        }
+        sendEqBands(p, mode)
         // --- v3.11 ---
         val st2 = _state.value
         p.clip?.takeIf { it.size >= 3 && st2.hasClip }?.let { setClip(it[0], it[1], it[2]); delay(40) }
@@ -288,21 +300,25 @@ class SppClient(private val context: Context) {
         requestEqDump()
     }
 
-    /** Preset bentuk EQ saja: tidak menyentuh volume/mixer/xover. */
-    private suspend fun applyEqOnly(p: Preset) {
-        val mode = _state.value.mode
-        val lockEq = mode != 0
-        if (!lockEq || p.eqOn) setEq(p.eqOn)
+    /** Kirim band EQ (L/R atau linked); band 0..2 dilewati saat crossover aktif (mode ≠ 0). */
+    private suspend fun sendEqBands(p: Preset, mode: Int) {
         val linked = p.eqLeft == p.eqRight
-        for (i in 0 until 15) {
-            if (lockEq && i <= 2) continue
-            if (linked) setEqBand("b", i, p.eqLeft.getOrElse(i) { 0f })
-            else {
+        for (i in PresetTools.activeBands(mode)) {
+            if (linked) {
+                setEqBand("b", i, p.eqLeft.getOrElse(i) { 0f })
+            } else {
                 setEqBand("l", i, p.eqLeft.getOrElse(i) { 0f })
                 setEqBand("r", i, p.eqRight.getOrElse(i) { 0f })
             }
             delay(28)
         }
+    }
+
+    /** Preset bentuk EQ saja: tidak menyentuh volume/mixer/xover. */
+    private suspend fun applyEqOnly(p: Preset) {
+        val mode = _state.value.mode
+        if (mode == 0 || p.eqOn) setEq(p.eqOn)
+        sendEqBands(p, mode)
         delay(100)
         requestEqDump()
     }
@@ -315,6 +331,18 @@ class SppClient(private val context: Context) {
         p.voice?.let { setVoice(it) }
         delay(100)
         requestStatus()
+    }
+
+    /** Scene: EQ (satelit) + voicing sub bila ada sub nirkabel; tanpa mode/xover/volume. */
+    private suspend fun applyScene(p: Preset) {
+        val st = _state.value
+        val mode = st.mode
+        if (mode == 0 || p.eqOn) setEq(p.eqOn)
+        sendEqBands(p, mode)
+        if (st.hasWsub && st.hasVoice) p.voice?.let { setVoice(it); delay(60) }
+        delay(100)
+        requestStatus()
+        requestEqDump()
     }
 
 }
