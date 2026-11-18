@@ -32,23 +32,34 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tas5805m.ctrl.data.AmpState
 import com.tas5805m.ctrl.data.AppViewModel
+import com.tas5805m.ctrl.data.Diagnosis
 import com.tas5805m.ctrl.data.FillSample
 import com.tas5805m.ctrl.data.PeerDetail
+import com.tas5805m.ctrl.data.VoiceParams
+import com.tas5805m.ctrl.data.faultNames
+import com.tas5805m.ctrl.ui.components.SendSlider
+import com.tas5805m.ctrl.ui.components.SendSliderInt
 import kotlinx.coroutines.delay
+import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 @Composable
 fun WsubScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val state by vm.state.collectAsStateWithLifecycle()
     val spp = vm.spp
 
-    // Poll every 1.5s only while connected — avoid hammering SPP
+    // Poll hanya saat tab ini tampil & tersambung. `status` berat (I2C baca fault + ±1,5 KB teks) → tiap 1,5 dtk;
+    // `wlvl` murah (firmware: aman ±6×/dtk) → level sub per slave ±3×/dtk di sela-selanya.
     LaunchedEffect(Unit) {
+        var n = 0
         while (true) {
-            delay(1500)
-            if (vm.state.value.connected) {
-                spp.requestStatus()
-            }
+            delay(250)
+            val st = vm.state.value
+            if (!st.connected) continue
+            if (n % 6 == 0) spp.requestStatus()
+            else if (st.hasWlvl && st.peerDetails.isNotEmpty()) spp.requestWlvl()
+            n++
         }
     }
 
@@ -143,6 +154,12 @@ fun WsubScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             TrimCard(current = state.wsubTrim, onTrim = { spp.wsubTrim(it) })
         }
 
+        if (state.hasVoice) {
+            item(key = "voice") {
+                VoiceCard(v = state.voice, warn = Diagnosis.voiceWarning(state), onChange = { spp.setVoice(it) })
+            }
+        }
+
         item(key = "radio") {
             RadioCard(state)
         }
@@ -152,7 +169,8 @@ fun WsubScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 "Catatan multi-sub:\n" +
                 "• Max 4 peer (firmware ≥ 2.9.3)\n" +
                 "• Grafik hanya update jika nilai berubah (hemat CPU)\n" +
-                "• Poll status 1.5 dtk · history max ${AmpState.HISTORY_MAX} titik\n" +
+                "• Poll status 1,5 dtk · level sub ±3×/dtk · history max ${AmpState.HISTORY_MAX} titik\n" +
+                "• Voicing sub (di DSP chip) berlaku di slave ≥ 2.9.19 dan disimpan otomatis di master\n" +
                 "• Unpair di slave: tahan BOOT 3 detik",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
@@ -173,6 +191,13 @@ private fun HeaderCard(state: AmpState) {
             Spacer(Modifier.height(6.dp))
             Text("Mode: ${state.modeName()}  ·  Max peers: ${state.wsubMax}")
             Text("Latency target: ${state.wsubLat} ms  ·  Trim: ${state.wsubTrim} ms")
+            if (state.fwVersion.isNotEmpty()) {
+                Text(
+                    "Firmware master: ${state.fwVersion}${if (state.fwRole.isNotEmpty()) " (${state.fwRole})" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
             if (state.wsubFb == 1) {
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -323,36 +348,131 @@ private fun FoundCard(found: String, paired: List<String>, onPair: (String) -> U
 private fun TrimCard(current: Int, onTrim: (Int) -> Unit) {
     Card {
         Column(Modifier.padding(12.dp)) {
-            Text("Trim Latency (ms relatif 70 ms)", style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Trim Latency (ms relatif 70 ms)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text("${if (current > 0) "+" else ""}$current ms", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            }
+            // Rentang firmware: −60 … +100 ms (+ = sub lebih lambat). Dikirim saat dilepas.
+            SendSliderInt(
+                value = current,
+                onSend = onTrim,
+                valueRange = -60..100,
+                live = false,
+                modifier = Modifier.fillMaxWidth()
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf(-40, -20, -10, 0, 10, 20, 40, 60).forEach { t ->
-                    FilterChip(
-                        selected = current == t,
-                        onClick = { onTrim(t) },
-                        label = { Text("$t") }
-                    )
+                listOf(-5, -1, 1, 5).forEach { d ->
+                    OutlinedButton(
+                        onClick = { onTrim((current + d).coerceIn(-60, 100)) },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                    ) { Text(if (d > 0) "+$d" else "$d") }
                 }
+                OutlinedButton(
+                    onClick = { onTrim(0) },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                ) { Text("0") }
             }
         }
     }
+}
+
+private fun fmt10(v: Int): String {
+    val a = abs(v)
+    return (if (v < 0) "-" else "") + "${a / 10}.${a % 10}"
+}
+
+private fun voiceBandHz(pkHz: Int): Int = if (pkHz < 100) 80 else 125
+
+/** Voicing sub (slave ≥ 2.9.19, di DSP chip): HPF subsonic (biquad) + peaking di band 80 / 125 Hz. Perintah: wsub_voice. */
+@Composable
+private fun VoiceCard(v: VoiceParams, warn: String?, onChange: (VoiceParams) -> Unit) {
+    Card {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Voicing Sub (bass)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Switch(checked = v.on, onCheckedChange = { onChange(v.copy(on = it)) })
+            }
+            Text(
+                "Subsonic HPF melindungi driver, peaking menebalkan bass di sekitar resonansi (fb). Diproses di DSP chip slave (butuh slave ≥ 2.9.19): peaking hanya di band 80 Hz atau 125 Hz (Q tetap), gain per 1 dB. Limiter dan harmonik tidak tersedia — batasi gain dan volume.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+            if (warn != null) {
+                Spacer(Modifier.height(6.dp))
+                Text(warn, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            Spacer(Modifier.height(8.dp))
+
+            Text("Auto dari fb driver: ${v.pkHz} Hz  →  HPF ≈ 0,7×fb, peaking band ${voiceBandHz(v.pkHz)} Hz +4 dB", style = MaterialTheme.typography.labelMedium)
+            SendSliderInt(
+                value = v.pkHz,
+                onSend = { fb ->
+                    onChange(
+                        v.copy(
+                            on = true,
+                            pkHz = fb.coerceIn(30, 150),
+                            hpf = (fb * 0.7f).roundToInt().coerceIn(20, 120),
+                            pkDb10 = if (v.pkDb10 <= 0) 40 else v.pkDb10,
+                        )
+                    )
+                },
+                valueRange = 30..100,
+                live = false,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            VoiceSlider("HPF subsonic", "${v.hpf} Hz", v.hpf, 20..120) { onChange(v.copy(hpf = it)) }
+            VoiceSlider("Peak frekuensi", "${v.pkHz} Hz → band ${voiceBandHz(v.pkHz)} Hz", v.pkHz, 30..150) { onChange(v.copy(pkHz = it)) }
+            val gainDb = (if (v.pkDb10 >= 0) (v.pkDb10 + 5) / 10 else (v.pkDb10 - 5) / 10).coerceIn(-6, 9)
+            VoiceSlider("Peak gain", "${if (gainDb > 0) "+" else ""}$gainDb dB", gainDb, -6..9) { onChange(v.copy(pkDb10 = it * 10)) }
+
+            Spacer(Modifier.height(4.dp))
+            OutlinedButton(onClick = { onChange(VoiceParams(on = false)) }) { Text("Reset / OFF") }
+        }
+    }
+}
+
+@Composable
+private fun VoiceSlider(label: String, valueText: String, value: Int, range: IntRange, onSend: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+        Text(valueText, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+    }
+    // live: bass bisa disetel sambil didengar; throttle 300 ms karena tiap perintah memicu status penuh
+    SendSliderInt(
+        value = value,
+        onSend = onSend,
+        valueRange = range,
+        throttleMs = 300L,
+        modifier = Modifier.fillMaxWidth().height(32.dp)
+    )
 }
 
 @Composable
 private fun RadioCard(state: AmpState) {
     Card {
         Column(Modifier.padding(12.dp)) {
-            Text("Radio Counters", style = MaterialTheme.typography.titleSmall)
+            Text("Radio Counters (per slave)", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
+            if (state.peerDetails.isEmpty()) {
+                Text("Belum ada peer", style = MaterialTheme.typography.bodySmall)
+            }
+            state.peerDetails.forEachIndexed { i, p ->
+                Text(
+                    "#${i + 1} RX a/c: ${p.rxa}/${p.rxc}  ·  Rej: ${p.rej}  ·  STX: ${p.stx}",
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    "   Fill: ${p.fillMs} ms  ·  Und: ${p.und}  ·  Gap: ${p.gap}",
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             Text(
-                "RX a/c: ${state.wsubRxa}/${state.wsubRxc}  ·  Rej: ${state.wsubRej}  ·  STX: ${state.wsubStx}",
-                fontFamily = FontFamily.Monospace,
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                "Fill: ${state.wsubFillMs} ms  ·  Und: ${state.wsubUnd}  ·  Gap: ${state.wsubGap}",
-                fontFamily = FontFamily.Monospace,
-                style = MaterialTheme.typography.bodySmall
+                "rxa/rxc = -1 → slave lama (< 2.9.x) atau link putus",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )
         }
     }
@@ -518,8 +638,32 @@ private fun PeerCardDetailed(
                 StatChip("Fill", "${peer.fillMs} ms")
                 StatChip("Und", "${peer.und}")
                 StatChip("Gap", "${peer.gap}")
-                if (peer.rxa >= 0) StatChip("RX", "${peer.rxa}/${peer.rxc}")
                 if (peer.hiz) StatChip("Hi-Z", "ON")
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (peer.rxa >= 0) StatChip("RX", "${peer.rxa}/${peer.rxc}")
+                if (peer.rssi != 0) StatChip("RSSI", "${peer.rssi} dBm")
+                if (peer.upSec >= 0) StatChip("Up", "${peer.upSec / 60} mnt")
+            }
+            peer.lvlDeciDb?.let { lv ->
+                Spacer(Modifier.height(6.dp))
+                LevelBar("SUB", lv)
+            }
+            if (peer.flt > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "FAULT slave: ${faultNames(peer.flt).joinToString(", ")} (×${peer.fcnt} sejak boot)",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else if (peer.fcnt > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Fault pernah terjadi ×${peer.fcnt} sejak boot slave (saat ini bersih)",
+                    color = Color(0xFFFFB74D),
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(

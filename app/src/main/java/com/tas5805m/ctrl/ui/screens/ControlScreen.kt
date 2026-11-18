@@ -27,6 +27,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tas5805m.ctrl.data.AppViewModel
+import com.tas5805m.ctrl.ui.components.SendSlider
+import com.tas5805m.ctrl.ui.components.SendSliderInt
+import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -48,6 +52,16 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             }
         }
         return
+    }
+
+    // Level meter hidup: poll `lvl`/`lvl2` ±2×/dtk hanya selama layar Home tampil (baris LVL tidak masuk log).
+    LaunchedEffect(Unit) {
+        while (true) {
+            val s = vm.state.value
+            if (s.hasLvl) spp.requestLvl()
+            if (s.hasLvl2) spp.requestLvl2()
+            delay(500)
+        }
     }
 
     Column(
@@ -115,21 +129,61 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                Slider(
-                    value = state.master.toFloat(),
-                    onValueChange = { spp.setMaster(it.toInt()) },
-                    valueRange = 0f..100f,
+                SendSliderInt(
+                    value = state.master,
+                    onSend = { spp.setMaster(it) },
+                    valueRange = 0..100,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         }
 
         // —— Sat / Sub / Center row ——
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MiniVolCard("SAT", state.sat, Modifier.weight(1f)) { spp.setSat(it) }
-            MiniVolCard("SUB", state.sub, Modifier.weight(1f)) { spp.setSub(it) }
-            if (state.is31 || state.hasCtr) {
-                MiniVolCard("CTR", state.ctr, Modifier.weight(1f)) { spp.setCtr(it) }
+        // Mode 0: firmware hanya memakai MASTER (satvol/subvol diabaikan). CTR hanya bermakna di mode 3.
+        if (state.mode != 0) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MiniVolCard("SAT", state.sat, Modifier.weight(1f)) { spp.setSat(it) }
+                MiniVolCard("SUB", state.sub, Modifier.weight(1f)) { spp.setSub(it) }
+                if (state.is31) {
+                    MiniVolCard("CTR", state.ctr, Modifier.weight(1f)) { spp.setCtr(it) }
+                }
+            }
+        }
+
+        // —— Polaritas sub + auto-standby ——
+        if ((state.hasSubInv && state.hasSubPath) || state.hasStandby) {
+            Card(shape = RoundedCornerShape(12.dp)) {
+                Column(Modifier.padding(12.dp)) {
+                    if (state.hasSubInv && state.hasSubPath) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("POLARITAS SUB", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                Text(
+                                    if (state.subInv) "Dibalik (180°)" else "Normal",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            Switch(checked = state.subInv, onCheckedChange = { spp.setSubInv(it) })
+                        }
+                    }
+                    if (state.hasStandby) {
+                        if (state.hasSubInv && state.hasSubPath) Spacer(Modifier.height(10.dp))
+                        Text(
+                            "AUTO-STANDBY  " + (if (state.standbyMin == 0) "OFF" else "${state.standbyMin} menit") +
+                                (if (state.inStandby) "  ·  SEDANG STANDBY" else ""),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        SendSliderInt(
+                            value = state.standbyMin,
+                            onSend = { spp.setStandby((it / 5) * 5) },
+                            valueRange = 0..120,
+                            steps = 23,
+                            live = false,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
             }
         }
 
@@ -139,13 +193,18 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 Text("MODE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(0 to "Stereo", 1 to "2.1 D", 2 to "2.1 S", 3 to "3.1", 4 to "W.Sub").forEach { (m, label) ->
-                        FilterChip(
-                            selected = state.mode == m,
-                            onClick = { spp.setMode(m) },
-                            label = { Text(label, fontSize = 11.sp) }
-                        )
-                    }
+                    // Hanya mode yang benar-benar diterima firmware (CAPS): master nirkabel terkunci mode 4,
+                    // mode 1/3 butuh chip kedua, mode 4 hanya di env wireless.
+                    listOf(0 to "Stereo", 1 to "2.1 D", 2 to "2.1 S", 3 to "3.1", 4 to "W.Sub")
+                        .filter { (m, _) -> state.modeAllowed(m) || state.mode == m }
+                        .forEach { (m, label) ->
+                            FilterChip(
+                                selected = state.mode == m,
+                                enabled = state.modeAllowed(m),
+                                onClick = { if (state.mode != m) spp.setMode(m) },
+                                label = { Text(label, fontSize = 11.sp) }
+                            )
+                        }
                 }
             }
         }
@@ -154,24 +213,23 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         Card(shape = RoundedCornerShape(12.dp)) {
             Column(Modifier.padding(12.dp)) {
                 Text("CROSSOVER  ${state.xover} Hz", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Slider(
+                // live = false: tiap `xover` menyetel ulang filter DSP (I2C) + status panjang → kirim hanya saat dilepas
+                SendSlider(
                     value = state.xover.toFloat(),
-                    onValueChange = {
-                        val hz = ((it / 10).toInt() * 10).coerceIn(60, 150)
-                        spp.setXover(hz)
-                    },
+                    onSend = { spp.setXover(((it / 10f).roundToInt() * 10).coerceIn(60, 150)) },
                     valueRange = 60f..150f,
-                    steps = 8
+                    steps = 8,
+                    live = false
                 )
                 Text(
                     "GAIN  ${state.gain}  (${"%.1f".format(-state.gain * 0.5)} dB)",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Slider(
-                    value = state.gain.toFloat(),
-                    onValueChange = { spp.setGain(it.toInt()) },
-                    valueRange = 0f..31f
+                SendSliderInt(
+                    value = state.gain,
+                    onSend = { spp.setGain(it) },
+                    valueRange = 0..31
                 )
             }
         }
@@ -258,10 +316,10 @@ private fun MiniVolCard(label: String, value: Int, modifier: Modifier = Modifier
         Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             Text("$value", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            Slider(
-                value = value.toFloat(),
-                onValueChange = { onChange(it.toInt()) },
-                valueRange = 0f..100f,
+            SendSliderInt(
+                value = value,
+                onSend = onChange,
+                valueRange = 0..100,
                 modifier = Modifier.height(28.dp)
             )
         }
@@ -285,6 +343,6 @@ fun LevelBar(label: String, deciDb: Int) {
             color = color,
             trackColor = Color(0xFF2A2A2A)
         )
-        Text("${"%.0f".format(db)}", modifier = Modifier.width(36.dp), style = MaterialTheme.typography.labelSmall)
+        Text("${db.roundToInt()}", modifier = Modifier.width(36.dp), style = MaterialTheme.typography.labelSmall)
     }
 }

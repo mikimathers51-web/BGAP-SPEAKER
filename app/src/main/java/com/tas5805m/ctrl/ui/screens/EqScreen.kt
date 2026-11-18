@@ -27,6 +27,7 @@ import com.tas5805m.ctrl.data.AppViewModel
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * EQ screen — Axton/DS18 style: frequency response curve + band sliders.
@@ -36,6 +37,17 @@ fun EqScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val state by vm.state.collectAsStateWithLifecycle()
     val spp = vm.spp
     var link by remember { mutableStateOf(true) }
+    // Mode 3: EQ terpisah untuk satelit (eqband), center (eqc c) dan sub (eqc s)
+    var target by remember { mutableStateOf("SAT") }
+    val hasTargets = state.is31 && state.hasEqc
+    val tgt = if (hasTargets) target else "SAT"
+    val chip2 = tgt != "SAT"
+    val linkEff = link || chip2
+    val src: List<Float> = when (tgt) {
+        "CTR" -> state.eqCtr
+        "SUB" -> state.eqSub
+        else -> state.eqLeft
+    }
 
     if (!state.connected) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -43,9 +55,6 @@ fun EqScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         }
         return
     }
-
-    val gains = if (link) state.eqLeft else state.eqLeft // curve uses L; R separate when unlinked
-    val gainsR = state.eqRight
 
     Column(modifier.fillMaxSize()) {
         // Toolbar
@@ -56,21 +65,34 @@ fun EqScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         ) {
             FilterChip(
                 selected = state.eqOn,
+                // firmware menolak `eq off` di mode 1/2/3/4 (bypass akan menghapus crossover)
+                enabled = !(state.xoverLocksEq && state.eqOn),
                 onClick = { spp.setEq(!state.eqOn) },
                 label = { Text(if (state.eqOn) "EQ ON" else "EQ OFF", fontWeight = FontWeight.Bold) }
             )
-            FilterChip(
-                selected = link,
-                onClick = { link = !link },
-                label = { Text(if (link) "L+R" else "L / R") }
-            )
+            if (!chip2) {
+                FilterChip(
+                    selected = link,
+                    onClick = { link = !link },
+                    label = { Text(if (link) "L+R" else "L / R") }
+                )
+            }
+            if (hasTargets) {
+                listOf("SAT", "CTR", "SUB").forEach { t ->
+                    FilterChip(
+                        selected = tgt == t,
+                        onClick = { target = t },
+                        label = { Text(t, fontSize = 11.sp) }
+                    )
+                }
+            }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = { spp.requestEqDump() }) { Text("Sync") }
         }
 
-        if (state.is21 || state.is31) {
+        if (state.xoverLocksEq) {
             Text(
-                "Mode 2.1/3.1: band 0–2 dikunci (crossover)",
+                "Mode ${state.modeName()}: band 0–2 dikunci (crossover)",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color(0xFFFFB74D),
                 modifier = Modifier.padding(horizontal = 12.dp)
@@ -87,9 +109,9 @@ fun EqScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         ) {
             Box(Modifier.fillMaxSize().background(Color(0xFF121212)).padding(8.dp)) {
                 EqCurve(
-                    gainsL = state.eqLeft,
-                    gainsR = if (link) state.eqLeft else state.eqRight,
-                    linked = link,
+                    gainsL = src,
+                    gainsR = if (linkEff) src else state.eqRight,
+                    linked = linkEff,
                     modifier = Modifier.fillMaxSize()
                 )
                 // dB labels
@@ -120,8 +142,12 @@ fun EqScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 AssistChip(
                     onClick = {
                         g.forEachIndexed { i, v ->
-                            if (!((state.is21 || state.is31) && i <= 2)) {
-                                spp.setEqBand("b", i, v)
+                            if (!(state.xoverLocksEq && i <= 2)) {
+                                when (tgt) {
+                                    "CTR" -> spp.setEqChip2("c", i, v)
+                                    "SUB" -> spp.setEqChip2("s", i, v)
+                                    else -> spp.setEqBand("b", i, v)
+                                }
                             }
                         }
                     },
@@ -136,10 +162,10 @@ fun EqScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             itemsIndexed(AmpState.BAND_FREQS) { i, freq ->
-                val locked = (state.is21 || state.is31) && i <= 2
-                val gL = state.eqLeft.getOrElse(i) { 0f }
+                val locked = state.xoverLocksEq && i <= 2
+                val gL = src.getOrElse(i) { 0f }
                 val gR = state.eqRight.getOrElse(i) { 0f }
-                var localL by remember(gL) { mutableFloatStateOf(gL) }
+                var localL by remember(gL, tgt) { mutableFloatStateOf(gL) }
                 var localR by remember(gR) { mutableFloatStateOf(gR) }
 
                 Card(
@@ -163,8 +189,8 @@ fun EqScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                                 color = if (locked) Color.Gray else MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                if (link) "${"%.1f".format(localL)} dB"
-                                else "L ${"%.1f".format(localL)}  R ${"%.1f".format(localR)}",
+                                if (linkEff) "${localL.roundToInt()} dB"
+                                else "L ${localL.roundToInt()}  R ${localR.roundToInt()}",
                                 fontSize = 11.sp,
                                 color = Color.White.copy(alpha = 0.7f)
                             )
@@ -175,23 +201,28 @@ fun EqScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                                 value = localL,
                                 onValueChange = {
                                     localL = it
-                                    if (link) localR = it
+                                    if (linkEff) localR = it
                                 },
                                 onValueChangeFinished = {
-                                    if (link) spp.setEqBand("b", i, localL)
-                                    else spp.setEqBand("l", i, localL)
+                                    when {
+                                        tgt == "CTR" -> spp.setEqChip2("c", i, localL)
+                                        tgt == "SUB" -> spp.setEqChip2("s", i, localL)
+                                        link -> spp.setEqBand("b", i, localL)
+                                        else -> spp.setEqBand("l", i, localL)
+                                    }
                                 },
+                                // firmware: gain EQ integer (sscanf %d) -> langkah 1 dB, bukan 0,5 dB
                                 valueRange = -15f..15f,
-                                steps = 59,
+                                steps = 29,
                                 modifier = Modifier.height(28.dp)
                             )
-                            if (!link) {
+                            if (!linkEff) {
                                 Slider(
                                     value = localR,
                                     onValueChange = { localR = it },
                                     onValueChangeFinished = { spp.setEqBand("r", i, localR) },
                                     valueRange = -15f..15f,
-                                    steps = 59,
+                                    steps = 29,
                                     modifier = Modifier.height(28.dp),
                                     colors = SliderDefaults.colors(
                                         thumbColor = Color(0xFFFF80AB),
