@@ -53,10 +53,8 @@ data class AmpState(
     val wsubFb: Int = 0,
     val wsubPeers: List<String> = emptyList(),
     val wsubLinks: List<Int> = emptyList(),
-    val wsubRxa: Int = -1,
-    val wsubRxc: Int = -1,
-    val wsubRej: Int = 0,
-    val wsubStx: Int = 0,
+    // Daftar per-peer (urutan sama dengan peers=)
+    val wsubFills: List<Int> = emptyList(),
     val wsubLat: Int = 70,
     val wsubTrim: Int = 0,
     val wsubMax: Int = 4,
@@ -69,9 +67,49 @@ data class AmpState(
     val undHistory: List<Int> = emptyList(),
     val gapHistory: List<Int> = emptyList(),
 
+    // FX (firmware >= 2.8): polaritas sub + auto-standby
+    val subInv: Boolean = false,
+    val standbyMin: Int = 0,
+    val inStandby: Boolean = false,
+
+    // VER fw=... role=... (firmware >= 2.9.x wireless master)
+    val fwVersion: String = "",
+    val fwRole: String = "",
+
+    // Voicing sub wireless (WSUBV)
+    val voice: VoiceParams = VoiceParams(),
+    val voiceKnown: Boolean = false,
+
+    // Fault chip 2 (FAULT2, env 2-chip)
+    val fault2Raw: String = "",
+
+    // EQ center / sub (mode 3): EQC / EQS
+    val eqCtr: List<Float> = List(15) { 0f },
+    val eqSub: List<Float> = List(15) { 0f },
+
+    // Diagnosa (3.11): kv terakhir tiap baris diag (WSUB, WSUBT, WSUBC, BTD, INFO, CLIP, MOD, DAC, DAC2, EQP2)
+    val tags: Map<String, Map<String, String>> = emptyMap(),
+    val rawByHead: Map<String, String> = emptyMap(),         // baris mentah terakhir per head (untuk laporan)
+    val slaveDiag: Map<String, Map<String, String>> = emptyMap(),   // WSUBD per MAC (HURUF BESAR)
+    val btEvents: List<String> = emptyList(),
+    val faultHistory: List<FaultEvent> = emptyList(),
+    val baseline: Map<String, Long> = emptyMap(),             // counter saat "mulai ukur"
+    val baselineAtMs: Long = 0L,
+    val lastRxMs: Long = 0L,
+    val saved: Boolean? = null,
+
     val lastLines: List<String> = emptyList(),
     val lastError: String = "",
 ) {
+    fun tag(t: String, k: String): String? = tags[t]?.get(k)
+    fun tagInt(t: String, k: String): Int? = tags[t]?.get(k)?.toIntOrNull()
+    val hasClip get() = "clip" in caps
+    val hasMod get() = "mod" in caps
+    val hasDac get() = "dac" in caps
+    val hasEqp get() = "eqp" in caps
+    val hasMixmode get() = "mixmode" in caps
+    val hasInfo get() = "info" in caps
+
     val hasEqband get() = "eqband" in caps
     val hasLvl get() = "lvl" in caps
     val hasLvl2 get() = "lvl2" in caps
@@ -79,9 +117,30 @@ data class AmpState(
     val hasWsub get() = "wsub" in caps
     val hasCtr get() = "ctr" in caps
     val hasSave get() = "save" in caps
+    val hasSubInv get() = "subinv" in caps
+    val hasStandby get() = "standby" in caps
+    val hasEqc get() = "eqc" in caps
+    val hasWlvl get() = "wlvl" in caps
+    val hasVoice get() = "wvoice" in caps || voiceKnown
     val is21 get() = mode == 1 || mode == 2
     val is31 get() = mode == 3
     val isWireless get() = mode == 4
+
+    /** Firmware: is21() == (mode != 0) -> band EQ 0..2 dicadangkan untuk crossover & `eq off` ditolak (mode 1,2,3,4). */
+    val xoverLocksEq get() = mode != 0
+    /** Mode 2 (1-chip 2.1) mengunci mixer (`ERR mixer locked_in_1chip_21`). */
+    val mixerLocked get() = mode == 2
+    /** Mode yang diterima firmware (cermin modeSupported()): master nirkabel hanya mode 4; mode 1/3 butuh chip 2 (CAPS ctr). */
+    fun modeAllowed(m: Int): Boolean = when {
+        caps.isEmpty() -> true
+        hasWsub -> m == 4
+        m == 4 -> false
+        m == 1 || m == 3 -> hasCtr
+        else -> m in 0..2
+    }
+
+    /** Mode 0 tidak punya sub -> subinv ditolak (`ERR subinv no_sub`). */
+    val hasSubPath get() = mode != 0
 
     fun modeName() = when (mode) {
         0 -> "Stereo"
@@ -98,6 +157,16 @@ data class AmpState(
     }
 }
 
+/** Urutan kunci fault pada baris `FAULT` / `FAULT2` firmware (printFaultLine). */
+val FAULT_KEYS = listOf("oc_r", "oc_l", "dc_r", "dc_l", "uv", "ov", "clk", "bq", "crc", "ot_sd", "ot_w")
+
+data class FaultEvent(
+    val timeMs: Long,
+    val chip: Int,              // 1 = FAULT, 2 = FAULT2
+    val flags: List<String>,    // subset FAULT_KEYS yang bernilai 1
+    val raw: String = "",
+)
+
 data class FillSample(
     val t: Long = System.currentTimeMillis(),
     val fillMs: Int = 0,
@@ -108,15 +177,43 @@ data class FillSample(
 
 data class PeerDetail(
     val mac: String,
+    val slot: Int = -1,
     val link: Boolean = false,
     val fillMs: Int = 0,
     val und: Int = 0,
     val gap: Int = 0,
-    val rxa: Int = -1,
-    val rxc: Int = -1,
+    val rate: Int = 0,
+    val rxa: Int = -1,       // paket audio diterima slave / detik (-1 = slave lama / putus)
+    val rxc: Int = -1,       // paket ctrl / detik
+    val rej: Int = 0,        // paket ditolak slave (MAC bukan master)
+    val stx: Int = 0,        // STATUS slave gagal terkirim
     val rssi: Int = 0,
     val hiz: Boolean = false,
+    val flt: Int = -1,       // bitmask fault amp slave, -1 = tidak diketahui
+    val fcnt: Int = 0,       // jumlah kejadian fault sejak boot slave
+    val upSec: Int = -1,     // uptime slave (dtk), -1 = slave < 2.9.16
+    val rst: Int = -1,       // alasan reset terakhir slave
+    val lvlDeciDb: Int? = null, // level sub (WLVL), null = n/a
 )
+
+/** Parameter voicing sub (firmware: wsub_voice on hpf pk_hz db10 q10 harm limit). */
+data class VoiceParams(
+    val on: Boolean = false,
+    val hpf: Int = 32,     // 20..120 Hz (subsonic HPF, orde-4)
+    val pkHz: Int = 55,    // 30..150 Hz (peaking)
+    val pkDb10: Int = 0,   // -60..90 (dB x10)
+    val pkQ10: Int = 10,   // 5..30 (Q x10)
+    val harm: Int = 0,     // 0..100 (pembangkit harmonik)
+    val limit: Int = 100,  // 50..100 (limiter lunak)
+) {
+    fun command() = "wsub_voice ${if (on) 1 else 0} $hpf $pkHz $pkDb10 $pkQ10 $harm $limit"
+}
+
+private val FAULT_BITS = listOf("OC-L", "OC-R", "DC-L", "DC-R", "UV", "OV", "CLK", "BQ", "CRC", "OT-SD", "OT-W")
+
+/** Decode bitmask fault slave (bit n = oc_l, oc_r, dc_l, dc_r, uv, ov, clk, bq, crc, ot_sd, ot_w). */
+fun faultNames(mask: Int): List<String> =
+    if (mask <= 0) emptyList() else FAULT_BITS.filterIndexed { i, _ -> (mask shr i) and 1 == 1 }
 
 data class Preset(
     val name: String,
@@ -133,4 +230,16 @@ data class Preset(
     val eqLeft: List<Float> = List(15) { 0f },
     val eqRight: List<Float> = List(15) { 0f },
     val created: String = "",
+    // --- 3.11 ---
+    /** "full" = semua; "eq" = hanya EQ (+EQ on/off); "voice" = hanya voicing sub + trim. */
+    val kind: String = "full",
+    val builtin: Boolean = false,
+    val note: String = "",
+    val clip: List<Int>? = null,          // [gain, ml, mr] (deci-dB)
+    val subInv: Boolean? = null,
+    val standby: Int? = null,
+    val trim: Int? = null,
+    val voice: VoiceParams? = null,
+    val eqCtr: List<Float>? = null,
+    val eqSub: List<Float>? = null,
 )
