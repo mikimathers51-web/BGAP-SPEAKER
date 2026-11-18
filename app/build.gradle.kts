@@ -12,8 +12,8 @@ android {
         applicationId = "com.tas5805m.ctrl"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0.0"
+        versionCode = (System.getenv("VERSION_CODE") ?: "41").toInt()
+        versionName = System.getenv("VERSION_NAME") ?: "3.11.0"
     }
 
     buildTypes {
@@ -55,4 +55,5 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    testImplementation("junit:junit:4.13.2")
 }
