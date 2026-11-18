@@ -1,6 +1,15 @@
 package com.tas5805m.ctrl.ui.screens
 
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import com.tas5805m.ctrl.data.DiagHistory
+import com.tas5805m.ctrl.data.DiagReport
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -87,14 +96,89 @@ fun DiagScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val state by vm.state.collectAsStateWithLifecycle()
     val spp = vm.spp
     val ctx = LocalContext.current
+    val history by vm.diagHistory.collectAsStateWithLifecycle()
+    var notice by remember { mutableStateOf("") }
+    var viewing by remember { mutableStateOf<DiagReport?>(null) }
+    var pendingText by remember { mutableStateOf<String?>(null) }
+
+    // Simpan ke file lewat dialog pilih lokasi Android (tanpa izin storage tambahan).
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        val t = pendingText
+        pendingText = null
+        if (uri != null && t != null) {
+            val ok = runCatching {
+                ctx.contentResolver.openOutputStream(uri, "wt")?.use { it.write(t.toByteArray(Charsets.UTF_8)) }
+                    ?: error("stream null")
+            }.isSuccess
+            notice = if (ok) "Laporan disimpan ke file." else "Gagal menyimpan file."
+        }
+    }
+
+    fun saveFile(text: String, ms: Long) {
+        pendingText = text
+        saver.launch(DiagHistory.fileName(ms))
+    }
+
+    fun shareText(text: String) {
+        val i = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "Laporan diagnosa TAS5805M")
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        ctx.startActivity(Intent.createChooser(i, "Bagikan laporan"))
+    }
+
+    viewing?.let { r ->
+        AlertDialog(
+            onDismissRequest = { viewing = null },
+            title = { Text(r.title) },
+            text = {
+                Column {
+                    Text(DiagHistory.stamp(r.createdMs), style = MaterialTheme.typography.labelSmall)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        r.text,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp,
+                        modifier = Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()),
+                    )
+                }
+            },
+            confirmButton = { TextButton(onClick = { viewing = null }) { Text("Tutup") } },
+            dismissButton = { TextButton(onClick = { shareText(r.text) }) { Text("Bagikan") } },
+        )
+    }
+
+    val histCard: @Composable () -> Unit = {
+        HistoryCard(
+            history = history,
+            onView = { viewing = it },
+            onShare = { shareText(it.text) },
+            onSave = { saveFile(it.text, it.createdMs) },
+            onDelete = { vm.deleteDiagReport(it.id) },
+            onClear = { vm.clearDiagHistory() },
+        )
+    }
 
     if (!state.connected) {
-        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.BluetoothDisabled, null, tint = Color.Gray)
-                Spacer(Modifier.height(12.dp))
-                Text("Hubungkan perangkat di tab Koneksi", color = Color.Gray)
+        LazyColumn(
+            modifier = modifier.fillMaxSize().padding(horizontal = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            item(key = "offline") {
+                Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.BluetoothDisabled, null, tint = Color.Gray)
+                        Spacer(Modifier.height(12.dp))
+                        Text("Hubungkan perangkat di tab Koneksi", color = Color.Gray)
+                        Text("Riwayat laporan tetap bisa dibuka di bawah.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                }
             }
+            if (notice.isNotEmpty()) item(key = "notice") { Text(notice, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+            item(key = "history") { histCard() }
+            item(key = "end") { Spacer(Modifier.height(24.dp)) }
         }
         return
     }
@@ -109,15 +193,6 @@ fun DiagScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 
     val findings = remember(state) { Diagnosis.diagnose(state) }
     var cmd by remember { mutableStateOf("") }
-
-    fun share() {
-        val i = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "Laporan diagnosa TAS5805M")
-            putExtra(Intent.EXTRA_TEXT, Diagnosis.report(state, findings))
-        }
-        ctx.startActivity(Intent.createChooser(i, "Bagikan laporan"))
-    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize().padding(horizontal = 12.dp),
@@ -136,9 +211,20 @@ fun DiagScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Button(onClick = { vm.refreshAll() }) { Text("Refresh semua") }
                         OutlinedButton(onClick = { spp.requestFault() }) { Text("Baca fault") }
-                        OutlinedButton(onClick = { vm.resetDiagnostics() }) { Text("Reset ukur") }
-                        OutlinedButton(onClick = { share() }) { Text("Bagikan laporan") }
+                        // Reset ukur: simpan dulu laporan "sebelum" agar bisa dibandingkan dengan laporan sesudahnya.
+                        OutlinedButton(onClick = {
+                            vm.saveDiagReport("Sebelum reset ukur", Diagnosis.report(state, findings))
+                            notice = "Laporan 'sebelum' disimpan ke riwayat; ukur dimulai ulang."
+                            vm.resetDiagnostics()
+                        }) { Text("Reset ukur") }
+                        OutlinedButton(onClick = {
+                            vm.saveDiagReport("Laporan manual", Diagnosis.report(state, findings))
+                            notice = "Laporan disimpan ke riwayat."
+                        }) { Text("Simpan ke riwayat") }
+                        OutlinedButton(onClick = { saveFile(Diagnosis.report(state, findings), System.currentTimeMillis()) }) { Text("Simpan file") }
+                        OutlinedButton(onClick = { shareText(Diagnosis.report(state, findings)) }) { Text("Bagikan laporan") }
                     }
+                    if (notice.isNotEmpty()) Text(notice, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -146,6 +232,8 @@ fun DiagScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         items(findings) { f -> FindingCard(f) }
 
         item(key = "faults") { FaultCard(state) }
+
+        item(key = "history") { histCard() }
 
         item(key = "chip") { RawCard("Chip & konfigurasi", state, listOf("VER", "INFO", "CLIP", "MOD", "DAC", "DAC2", "EQP", "EQP2")) }
 
@@ -296,6 +384,59 @@ private fun WirelessRaw(s: AmpState) {
                 Text("Event Bluetooth", style = MaterialTheme.typography.labelMedium)
                 s.btEvents.takeLast(8).reversed().forEach {
                     Text(it, fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 14.sp)
+                }
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HistoryCard(
+    history: List<DiagReport>,
+    onView: (DiagReport) -> Unit,
+    onShare: (DiagReport) -> Unit,
+    onSave: (DiagReport) -> Unit,
+    onDelete: (DiagReport) -> Unit,
+    onClear: () -> Unit,
+) {
+    var confirmClear by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Riwayat laporan (${history.size}/${DiagHistory.MAX})",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                if (history.isNotEmpty()) {
+                    TextButton(onClick = { if (confirmClear) { onClear(); confirmClear = false } else confirmClear = true }) {
+                        Text(if (confirmClear) "Yakin hapus semua?" else "Hapus semua", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+            if (history.isEmpty()) {
+                Text(
+                    "Belum ada. Tekan \"Simpan ke riwayat\" atau \"Reset ukur\" (otomatis menyimpan laporan sebelum reset) untuk membandingkan sebelum/sesudah tuning.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+            history.forEach { r ->
+                HorizontalDivider()
+                Text(r.title, fontWeight = FontWeight.SemiBold)
+                Text(
+                    DiagHistory.stamp(r.createdMs) + " · " + r.text.count { it == '\n' } + " baris",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { onView(r) }) { Text("Buka") }
+                    TextButton(onClick = { onShare(r) }) { Text("Bagikan") }
+                    TextButton(onClick = { onSave(r) }) { Text("Simpan file") }
+                    TextButton(onClick = { onDelete(r) }) { Text("Hapus", color = MaterialTheme.colorScheme.error) }
                 }
             }
         }

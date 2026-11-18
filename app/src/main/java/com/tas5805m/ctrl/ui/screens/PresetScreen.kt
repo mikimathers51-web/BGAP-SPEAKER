@@ -3,7 +3,6 @@ package com.tas5805m.ctrl.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
@@ -18,10 +17,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tas5805m.ctrl.data.AmpState
 import com.tas5805m.ctrl.data.AppViewModel
 import com.tas5805m.ctrl.data.Preset
+import com.tas5805m.ctrl.data.PresetTools
 import kotlinx.coroutines.launch
 
 private fun describe(p: Preset): String = when (p.kind) {
-    "eq", "voice" -> p.note
+    "eq", "voice", "scene" -> p.note.ifEmpty { if (p.kind == "scene") "EQ + voicing sub" else "" }
     else -> buildString {
         append("Mode ${p.mode} · Xover ${p.xover} Hz · Master ${p.master}")
         if (p.voice != null) append(" · voicing")
@@ -33,11 +33,25 @@ private fun describe(p: Preset): String = when (p.kind) {
 private fun kindLabel(p: Preset): String = when (p.kind) {
     "eq" -> "EQ"
     "voice" -> "Voicing sub"
+    "scene" -> "Scene"
     else -> "Lengkap"
 }
 
 private fun canApply(p: Preset, s: AmpState): Boolean =
     s.connected && (p.kind != "voice" || (s.hasWsub && s.hasVoice))
+
+/** Alasan tombol Terapkan nonaktif (null bila aktif). */
+private fun disabledReason(p: Preset, s: AmpState): String? = when {
+    !s.connected -> "Belum terhubung."
+    p.kind == "voice" && !(s.hasWsub && s.hasVoice) -> "Butuh sub nirkabel dengan slave ≥ 2.9.19."
+    else -> null
+}
+
+private fun applyMessage(p: Preset, mode: Int, err: String?): String = buildString {
+    append("“${p.name}” diterapkan.")
+    if (err != null) append(" Peringatan: ").append(err).append('.')
+    PresetTools.warning(p, mode)?.let { append(' ').append(it) }
+}
 
 @Composable
 fun PresetScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
@@ -69,6 +83,10 @@ fun PresetScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                         enabled = state.connected,
                     ) { Text("Simpan") }
                 }
+                OutlinedButton(
+                    onClick = { if (state.connected) { vm.saveScene(name); name = ""; notice = "Scene disimpan (EQ + voicing sub)." } },
+                    enabled = state.connected,
+                ) { Text("Simpan sebagai Scene (EQ + voicing)") }
                 Text(
                     "Preset lengkap menyimpan mode, xover, volume, gain, mixer, EQ 15 band, serta (bila ada) clipper, polaritas sub, standby, trim, voicing sub, dan EQ center/sub.",
                     style = MaterialTheme.typography.bodySmall,
@@ -81,13 +99,15 @@ fun PresetScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         item(key = "h_builtin") {
             Text("Bawaan", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
             Text(
-                "Preset EQ hanya mengubah EQ (band 20/32/50 Hz dilewati saat crossover aktif); preset voicing hanya mengubah voicing sub.",
+                "Preset EQ hanya mengubah EQ (band 20/32/50 Hz dilewati saat crossover aktif); preset voicing hanya mengubah voicing sub; Scene = EQ + voicing sub tanpa mengubah mode, crossover, atau volume.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
         }
-        items(vm.builtinPresets, key = { "b_" + it.name }) { p ->
-            PresetRow(p, canApply(p, state), onApply = { vm.applyPreset(p); notice = "“${p.name}” dikirim." }, onDelete = null)
+        items(vm.builtinPresets, key = { it.id }) { p ->
+            PresetRow(p, canApply(p, state), disabledReason(p, state), PresetTools.warning(p, state.mode),
+                onApply = { notice = "Menerapkan “${p.name}”…"; vm.applyPreset(p) { err -> notice = applyMessage(p, state.mode, err) } },
+                onDelete = null)
         }
 
         item(key = "h_user") {
@@ -105,8 +125,10 @@ fun PresetScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         if (presets.isEmpty()) {
             item(key = "empty") { Text("Belum ada preset. Atur EQ/volume lalu tekan Simpan.", style = MaterialTheme.typography.bodySmall) }
         }
-        itemsIndexed(presets) { i, p ->
-            PresetRow(p, canApply(p, state), onApply = { vm.applyPreset(p); notice = "“${p.name}” dikirim." }, onDelete = { vm.deletePreset(i) })
+        items(presets, key = { it.id }) { p ->
+            PresetRow(p, canApply(p, state), disabledReason(p, state), PresetTools.warning(p, state.mode),
+                onApply = { notice = "Menerapkan “${p.name}”…"; vm.applyPreset(p) { err -> notice = applyMessage(p, state.mode, err) } },
+                onDelete = { vm.deletePreset(p.id) })
         }
         item(key = "end") { Spacer(Modifier.height(24.dp)) }
     }
@@ -138,11 +160,17 @@ fun PresetScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun PresetRow(p: Preset, enabled: Boolean, onApply: () -> Unit, onDelete: (() -> Unit)?) {
+private fun PresetRow(p: Preset, enabled: Boolean, reason: String?, warning: String?, onApply: () -> Unit, onDelete: (() -> Unit)?) {
     Card {
         ListItem(
             headlineContent = { Text(p.name) },
-            supportingContent = { Text(kindLabel(p) + " · " + describe(p)) },
+            supportingContent = {
+                Column {
+                    Text(kindLabel(p) + " · " + describe(p))
+                    if (reason != null) Text(reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    if (warning != null) Text(warning, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                }
+            },
             trailingContent = {
                 Row {
                     IconButton(onClick = onApply, enabled = enabled) {

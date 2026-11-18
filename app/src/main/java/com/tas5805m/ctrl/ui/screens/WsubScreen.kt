@@ -156,7 +156,7 @@ fun WsubScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 
         if (state.hasVoice) {
             item(key = "voice") {
-                VoiceCard(v = state.voice, warn = Diagnosis.voiceWarning(state), onChange = { spp.setVoice(it) })
+                VoiceCard(v = state.voice, warn = Diagnosis.voiceWarning(state), free = Diagnosis.voiceFreePeak(state), onChange = { spp.setVoice(it) })
             }
         }
 
@@ -170,7 +170,7 @@ fun WsubScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 "• Max 4 peer (firmware ≥ 2.9.3)\n" +
                 "• Grafik hanya update jika nilai berubah (hemat CPU)\n" +
                 "• Poll status 1,5 dtk · level sub ±3×/dtk · history max ${AmpState.HISTORY_MAX} titik\n" +
-                "• Voicing sub (di DSP chip) berlaku di slave ≥ 2.9.19 dan disimpan otomatis di master\n" +
+                "• Voicing sub (di DSP chip): slave ≥ 2.9.19; peaking bebas (frekuensi/Q/gain 0,5 dB) di slave ≥ 2.9.20. Disimpan otomatis di master\n" +
                 "• Unpair di slave: tahan BOOT 3 detik",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
@@ -383,9 +383,14 @@ private fun fmt10(v: Int): String {
 
 private fun voiceBandHz(pkHz: Int): Int = if (pkHz < 100) 80 else 125
 
-/** Voicing sub (slave ≥ 2.9.19, di DSP chip): HPF subsonic (biquad) + peaking di band 80 / 125 Hz. Perintah: wsub_voice. */
+/**
+ * Voicing sub di DSP chip slave. Perintah: `wsub_voice`.
+ *  - slave ≥ 2.9.20 ([free] = true): HPF subsonic + peaking bebas (frekuensi 30–150 Hz, Q 0,5–3,0, gain 0,5 dB).
+ *  - slave 2.9.19 ([free] = false): HPF subsonic + peaking di band EQ 80 / 125 Hz (Q tetap, gain 1 dB).
+ * "fb" = frekuensi resonansi driver sub; slider fb mengisi HPF ≈ 0,7×fb dan peaking di fb sekaligus.
+ */
 @Composable
-private fun VoiceCard(v: VoiceParams, warn: String?, onChange: (VoiceParams) -> Unit) {
+private fun VoiceCard(v: VoiceParams, warn: String?, free: Boolean, onChange: (VoiceParams) -> Unit) {
     Card {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -393,7 +398,8 @@ private fun VoiceCard(v: VoiceParams, warn: String?, onChange: (VoiceParams) -> 
                 Switch(checked = v.on, onCheckedChange = { onChange(v.copy(on = it)) })
             }
             Text(
-                "Subsonic HPF melindungi driver, peaking menebalkan bass di sekitar resonansi (fb). Diproses di DSP chip slave (butuh slave ≥ 2.9.19): peaking hanya di band 80 Hz atau 125 Hz (Q tetap), gain per 1 dB. Limiter dan harmonik tidak tersedia — batasi gain dan volume.",
+                if (free) "Subsonic HPF melindungi driver, peaking menebalkan bass di sekitar resonansi (fb). Diproses di DSP chip slave (≥ 2.9.20): frekuensi, Q, dan gain (0,5 dB) bebas. Limiter dan harmonik tidak tersedia — batasi gain dan volume."
+                else "Subsonic HPF melindungi driver, peaking menebalkan bass di sekitar resonansi (fb). Diproses di DSP chip slave (butuh slave ≥ 2.9.19): peaking hanya di band 80 Hz atau 125 Hz (Q tetap), gain per 1 dB. Flash slave 2.9.20 untuk peaking bebas. Limiter dan harmonik tidak tersedia — batasi gain dan volume.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
@@ -403,7 +409,12 @@ private fun VoiceCard(v: VoiceParams, warn: String?, onChange: (VoiceParams) -> 
             }
             Spacer(Modifier.height(8.dp))
 
-            Text("Auto dari fb driver: ${v.pkHz} Hz  →  HPF ≈ 0,7×fb, peaking band ${voiceBandHz(v.pkHz)} Hz +4 dB", style = MaterialTheme.typography.labelMedium)
+            Text(
+                // Gain peaking hanya diisi +4 dB bila sebelumnya ≤ 0 (lihat onSend di bawah); selain itu nilai lama dipertahankan.
+                if (free) "Auto dari fb driver: ${v.pkHz} Hz  →  HPF ≈ 0,7×fb, peaking di fb (gain +4 dB bila sebelumnya ≤ 0)"
+                else "Auto dari fb driver: ${v.pkHz} Hz  →  HPF ≈ 0,7×fb, peaking band ${voiceBandHz(v.pkHz)} Hz (gain +4 dB bila sebelumnya ≤ 0)",
+                style = MaterialTheme.typography.labelMedium
+            )
             SendSliderInt(
                 value = v.pkHz,
                 onSend = { fb ->
@@ -416,15 +427,25 @@ private fun VoiceCard(v: VoiceParams, warn: String?, onChange: (VoiceParams) -> 
                         )
                     )
                 },
-                valueRange = 30..100,
+                valueRange = 30..150,
                 live = false,
                 modifier = Modifier.fillMaxWidth()
             )
 
             VoiceSlider("HPF subsonic", "${v.hpf} Hz", v.hpf, 20..120) { onChange(v.copy(hpf = it)) }
-            VoiceSlider("Peak frekuensi", "${v.pkHz} Hz → band ${voiceBandHz(v.pkHz)} Hz", v.pkHz, 30..150) { onChange(v.copy(pkHz = it)) }
-            val gainDb = (if (v.pkDb10 >= 0) (v.pkDb10 + 5) / 10 else (v.pkDb10 - 5) / 10).coerceIn(-6, 9)
-            VoiceSlider("Peak gain", "${if (gainDb > 0) "+" else ""}$gainDb dB", gainDb, -6..9) { onChange(v.copy(pkDb10 = it * 10)) }
+            if (free) {
+                VoiceSlider("Peak frekuensi", "${v.pkHz} Hz", v.pkHz, 30..150) { onChange(v.copy(pkHz = it)) }
+                // 0,5 dB per langkah: nilai slider = pkDb10 / 5  (−12..18 → −6,0..+9,0 dB)
+                val half = (v.pkDb10 / 5).coerceIn(-12, 18)
+                val gtxt = String.format(java.util.Locale.US, "%+.1f dB", half * 0.5f)
+                VoiceSlider("Peak gain", gtxt, half, -12..18) { onChange(v.copy(pkDb10 = it * 5)) }
+                val q = v.pkQ10.coerceIn(5, 30)
+                VoiceSlider("Peak Q", String.format(java.util.Locale.US, "%.1f", q / 10f), q, 5..30) { onChange(v.copy(pkQ10 = it)) }
+            } else {
+                VoiceSlider("Peak frekuensi", "${v.pkHz} Hz → band ${voiceBandHz(v.pkHz)} Hz", v.pkHz, 30..150) { onChange(v.copy(pkHz = it)) }
+                val gainDb = (if (v.pkDb10 >= 0) (v.pkDb10 + 5) / 10 else (v.pkDb10 - 5) / 10).coerceIn(-6, 9)
+                VoiceSlider("Peak gain", "${if (gainDb > 0) "+" else ""}$gainDb dB", gainDb, -6..9) { onChange(v.copy(pkDb10 = it * 10)) }
+            }
 
             Spacer(Modifier.height(4.dp))
             OutlinedButton(onClick = { onChange(VoiceParams(on = false)) }) { Text("Reset / OFF") }
