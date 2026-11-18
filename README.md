@@ -13,10 +13,13 @@ UI Home + EQ terinspirasi pola AXTON/DS18 (status Connect, master gauge, kurva E
   - Trim latency (-60 … +100 ms, slider + tombol ±1/±5)
   - Fallback stereo indicator
   - Radio counters (rxa/rxc/rej/stx)
-- **Voicing sub wireless** — HPF subsonic (biquad) + peaking (band EQ upstream 80/125 Hz, gain 1 dB) di DSP chip, auto-setup dari fb driver (`wsub_voice`). Sejak app 3.10.0 / firmware 2.9.19; limiter dan harmonik dihapus
+- **Voicing sub wireless** — HPF subsonic (biquad) + peaking di DSP chip slave, auto-setup dari **fb** (frekuensi resonansi driver) lewat `wsub_voice`.
+  - Slave ≥ 2.9.20 (app ≥ 3.12.0): peaking bebas — frekuensi 30–150 Hz, Q 0,5–3,0, gain 0,5 dB.
+  - Slave 2.9.19: peaking hanya di band 80/125 Hz (Q tetap, gain 1 dB); UI menyesuaikan otomatis.
+  - Limiter dan harmonik sudah dihapus (diabaikan firmware): batasi gain peak (≤ +4 dB) dan volume.
 - **Polaritas sub** + **auto-standby** (`subinv`, `standby`), level meter sub per slave (`wlvl`), fault slave (`WSUBS flt=`)
 - **DSP lengkap** — 15-band EQ (1 dB, integer seperti firmware), link L/R, quick shapes, EQ center/sub di mode 3 (`eqc`)
-- **Preset** — simpan/terapkan mode+volume+EQ (DataStore)
+- **Preset** — simpan/terapkan mode+volume+EQ (DataStore); preset bawaan EQ / voicing sub / **Scene** (EQ + voicing)
 - **Diagnosa** — fault, level meter, CAPS, log SPP
 - **Custom adaptive icon** (speaker + EQ bars)
 
@@ -39,23 +42,17 @@ gradle assembleRelease      # butuh Gradle 8.9 + JDK 17 + Android SDK 35 (atau b
 |-----|--------|
 | Koneksi | Pair & connect SPP |
 | Kontrol | Mode, volume, xover, gain, amp state, level meter |
-| EQ / DSP | 15-band + quick shapes |
-| **Wireless** | Multi-sub pairing & diagnosa per-peer |
-| Diagnosa | Status lengkap + log |
+| EQ | 15-band + quick shapes + kurva respons |
+| DSP | Sub-tab **DSP** (mixer, profil filter, clipper, PWM, DAC, gain, standby, polaritas, simpan/reboot) dan **Preset** |
+| **Wireless** | Multi-sub pairing, trim, voicing sub & diagnosa per-peer (tampil bila firmware wireless) |
+| Diagnosa | Ringkasan masalah otomatis, status lengkap, riwayat laporan, log |
 
-minSdk 26 · targetSdk 35 · Kotlin 2.0 · Compose BOM 2024.10
+minSdk 26 · targetSdk 35 · Kotlin 2.0.20 · Compose BOM 2024.10.00
 
+## Riwayat perubahan
 
-## Perubahan 3.11.0
+Lihat [CHANGELOG.md](CHANGELOG.md).
 
-- **Diagnosa** ditulis ulang: ringkasan masalah otomatis (aturan dari tabel README firmware, laju paket dihitung dari `pkt=` slave),
-  fault chip 1/2 + riwayat sesi, info chip (`INFO`, `VER`, `CLIP`, `MOD`, `DAC`), statistik link nirkabel & Bluetooth
-  (`WSUB`, `WSUBT`, `WSUBD`, `WSUBC`, `BTD`, `BTEV`), "Reset ukur" (delta counter), terminal, dan **Bagikan laporan**.
-- **Tab DSP** baru: mixer 2×2 + mixmode + lebar stereo, profil filter (mode 0), clipper, modulasi PWM, DAC BTL/PBTL (dengan konfirmasi),
-  gain analog, auto-standby, polaritas sub, simpan/hapus/reboot.
-- **Preset** (sub-tab di DSP): preset bawaan (EQ + voicing sub), preset lengkap kini juga menyimpan clipper, polaritas sub, standby,
-  trim, voicing sub, dan EQ center/sub; ekspor/impor JSON lewat clipboard.
-- Home: level meter hidup (poll `lvl`/`lvl2` saat tab tampil). Log tidak lagi dibanjiri baris poll.
-- Perbaikan: daftar perangkat ter-pair kosong saat pertama dijalankan; `cancelDiscovery()` tidak lagi menggagalkan koneksi bila izin SCAN ditolak;
-  reader sesi lama tidak menandai sesi baru sebagai putus; peringatan voicing (slave < 2.9.19, gain peak > +4 dB tanpa limiter).
-- Build: AGP 8.7.3, `gradlew` palsu dihapus (CI memakai `gradle` 8.9), tes unit di CI, rilis otomatis untuk tag `v*`.
+## Dokumen terkait
+
+Protokol SPP & firmware: `docs/PROTOCOL.md` dan `README.md` di proyek firmware (2.9.20).
