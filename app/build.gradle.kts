@@ -12,15 +12,29 @@ android {
         applicationId = "com.tas5805m.ctrl"
         minSdk = 26
         targetSdk = 35
-        versionCode = (System.getenv("VERSION_CODE") ?: "41").toInt()
-        versionName = System.getenv("VERSION_NAME") ?: "3.11.0"
+        versionCode = (System.getenv("VERSION_CODE") ?: "43").toInt()
+        versionName = System.getenv("VERSION_NAME") ?: "3.12.1"
+    }
+
+    // Tanda tangan rilis: isi secret KEYSTORE_B64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD di GitHub (lihat build.yml).
+    // Tanpa secret → jatuh ke kunci debug (APK tetap bisa dipasang, tetapi TIDAK cocok untuk distribusi/update jangka panjang).
+    val releaseKeystore = System.getenv("KEYSTORE_PATH")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -56,4 +70,6 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
+    // org.json di android.jar hanya stub pada tes JVM → pakai implementasi nyata untuk tes PresetJson
+    testImplementation("org.json:json:20240303")
 }
