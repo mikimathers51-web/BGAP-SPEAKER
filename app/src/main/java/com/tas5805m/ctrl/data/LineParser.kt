@@ -53,7 +53,7 @@ object LineParser {
                 btEvents = (ns.btEvents + (stamp(nowMs) + " " + line.removePrefix("BTEV ").trim())).takeLast(40)
             )
             "SAVED" -> ns = ns.copy(saved = line.trim().endsWith("1"))
-            "ERR" -> ns = ns.copy(lastError = line)
+            "ERR" -> ns = ns.copy(lastError = line, errCount = ns.errCount + 1)
             "OK" -> {
                 val what = line.removePrefix("OK").trim()
                 if (what !in SYNC_OK && ns.lastError.isNotEmpty()) ns = ns.copy(lastError = "")

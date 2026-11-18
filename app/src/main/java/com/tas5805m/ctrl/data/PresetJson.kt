@@ -12,6 +12,7 @@ object PresetJson {
     }
 
     fun toObj(p: Preset): JSONObject = JSONObject().apply {
+        put("id", p.id)
         put("name", p.name)
         put("kind", p.kind)
         put("note", p.note)
@@ -44,7 +45,7 @@ object PresetJson {
 
     fun fromJson(raw: String): List<Preset> = try {
         val arr = JSONArray(raw)
-        (0 until arr.length()).map { fromObj(arr.getJSONObject(it)) }
+        (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { fromObj(it, i) } }
     } catch (_: Exception) {
         emptyList()
     }
@@ -57,7 +58,12 @@ object PresetJson {
     private fun optInt(o: JSONObject, key: String): Int? =
         if (o.has(key) && !o.isNull(key)) o.optInt(key) else null
 
-    fun fromObj(o: JSONObject): Preset {
+    /** Preset lama (sebelum 3.12) tidak punya id: buat id deterministik agar hapus-berdasar-id konsisten antar pembacaan. */
+    private fun legacyId(o: JSONObject, index: Int): String =
+        "legacy-" + Integer.toHexString((o.optString("name") + "|" + o.optString("created") + "|" + index).hashCode())
+
+    /** `index` = posisi di array JSON (hanya untuk id preset lama). Nilai selalu di-clamp lewat PresetTools.sanitize. */
+    fun fromObj(o: JSONObject, index: Int = 0): Preset {
         val clip = o.optJSONArray("clip")?.let { a -> (0 until a.length()).map { a.optInt(it) } }
         val voice = o.optJSONObject("voice")?.let { v ->
             VoiceParams(
@@ -70,7 +76,8 @@ object PresetJson {
                 limit = v.optInt("limit", 100),
             )
         }
-        return Preset(
+        return PresetTools.sanitize(Preset(
+            id = o.optString("id").ifBlank { legacyId(o, index) },
             name = o.optString("name"),
             kind = o.optString("kind", "full").ifEmpty { "full" },
             note = o.optString("note"),
@@ -96,6 +103,6 @@ object PresetJson {
             voice = voice,
             eqCtr = floats(o, "eqCtr"),
             eqSub = floats(o, "eqSub"),
-        )
+        ))
     }
 }

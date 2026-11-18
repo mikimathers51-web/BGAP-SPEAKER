@@ -22,6 +22,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
 
+    private val diagRepo = DiagHistoryRepository(app)
+    val diagHistory: StateFlow<List<DiagReport>> = diagRepo.reports.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+
     init {
         spp.refreshBonded()
     }
@@ -58,18 +63,42 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { presetRepo.add(p) }
     }
 
-    fun deletePreset(index: Int) {
-        viewModelScope.launch { presetRepo.remove(index) }
+    /** Simpan EQ + voicing sub saat ini sebagai preset "scene" (tanpa mode/xover/volume). */
+    fun saveScene(name: String) {
+        val s = state.value
+        val p = Preset(
+            name = name.ifBlank { "Scene ${System.currentTimeMillis() % 10000}" },
+            kind = "scene",
+            eqOn = s.eqOn, eqLeft = s.eqLeft, eqRight = s.eqRight,
+            created = java.time.Instant.now().toString(),
+            voice = if (s.hasWsub && s.hasVoice) s.voice else null,
+        )
+        viewModelScope.launch { presetRepo.add(p) }
     }
 
-    fun applyPreset(p: Preset) {
-        viewModelScope.launch { spp.applyPreset(p) }
+    fun deletePreset(id: String) {
+        viewModelScope.launch { presetRepo.removeById(id) }
+    }
+
+    /** Terapkan preset; `onDone` menerima null (semua diterima) atau ringkasan perintah yang ditolak firmware. */
+    fun applyPreset(p: Preset, onDone: (String?) -> Unit = {}) {
+        viewModelScope.launch { onDone(spp.applyPreset(p)) }
     }
 
     suspend fun exportPresets(): String = presetRepo.exportJson()
 
     /** Mengembalikan jumlah preset yang berhasil diimpor. */
     suspend fun importPresets(raw: String): Int = presetRepo.importJson(raw)
+
+    /** Simpan teks laporan ke riwayat (maks 20 terbaru). */
+    fun saveDiagReport(title: String, text: String) {
+        val r = DiagHistory.make(title, text, System.currentTimeMillis())
+        viewModelScope.launch { diagRepo.add(r) }
+    }
+
+    fun deleteDiagReport(id: String) { viewModelScope.launch { diagRepo.remove(id) } }
+
+    fun clearDiagHistory() { viewModelScope.launch { diagRepo.clear() } }
 
     fun resetDiagnostics() {
         viewModelScope.launch { spp.resetDiagnostics() }

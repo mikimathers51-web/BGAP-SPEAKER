@@ -100,6 +100,8 @@ data class AmpState(
 
     val lastLines: List<String> = emptyList(),
     val lastError: String = "",
+    /** Jumlah baris `ERR` sejak koneksi (naik terus; dipakai untuk mendeteksi perintah yang ditolak saat apply preset). */
+    val errCount: Int = 0,
 ) {
     fun tag(t: String, k: String): String? = tags[t]?.get(k)
     fun tagInt(t: String, k: String): Int? = tags[t]?.get(k)?.toIntOrNull()
@@ -215,8 +217,12 @@ private val FAULT_BITS = listOf("OC-L", "OC-R", "DC-L", "DC-R", "UV", "OV", "CLK
 fun faultNames(mask: Int): List<String> =
     if (mask <= 0) emptyList() else FAULT_BITS.filterIndexed { i, _ -> (mask shr i) and 1 == 1 }
 
+/** ID preset unik (UUID). Preset lama tanpa id mendapat id deterministik saat dibaca (lihat PresetJson). */
+fun newPresetId(): String = java.util.UUID.randomUUID().toString()
+
 data class Preset(
     val name: String,
+    val id: String = newPresetId(),
     val mode: Int = 0,
     val xover: Int = 100,
     val master: Int = 80,
@@ -231,7 +237,8 @@ data class Preset(
     val eqRight: List<Float> = List(15) { 0f },
     val created: String = "",
     // --- 3.11 ---
-    /** "full" = semua; "eq" = hanya EQ (+EQ on/off); "voice" = hanya voicing sub + trim. */
+    /** "full" = semua; "eq" = hanya EQ (+EQ on/off); "voice" = hanya voicing sub + trim;
+     *  "scene" = EQ + voicing sub (tanpa mode/xover/volume → aman di mode 4 dan tidak melonjakkan volume). */
     val kind: String = "full",
     val builtin: Boolean = false,
     val note: String = "",

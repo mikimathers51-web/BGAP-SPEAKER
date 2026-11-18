@@ -24,6 +24,8 @@ data class Finding(
 object Diagnosis {
     /** Slave dengan patch ≥ ini memproses voicing di chip (HPF biquad + peaking), bukan di ESP32. */
     const val SLAVE_VOICE_PATCH = 19
+    /** Slave ≥ 2.9.20: peaking bebas (Hz/Q/0,1 dB) via biquad; < 2.9.20: band 80/125 Hz, gain bulat, Q tetap. */
+    const val SLAVE_FREE_PEAK_PATCH = 20
     private const val DEFAULT_PKT = 64
 
     val FAULT_INFO: Map<String, Triple<Level, String, String>> = mapOf(
@@ -298,6 +300,15 @@ object Diagnosis {
     /** Peringatan khusus voicing (dipakai juga oleh kartu Voicing di tab Wireless). Null = tidak ada. */
     fun voiceWarning(s: AmpState): String? = voice(s)
 
+    /** True bila SEMUA slave yang terpasang melapor firmware ≥ 2.9.20 (versi tak diketahui dianggap belum). */
+    fun voiceFreePeak(s: AmpState): Boolean {
+        if (s.peerDetails.isEmpty()) return false
+        return s.peerDetails.all { p ->
+            val patch = s.slaveDiag[p.mac.uppercase()]?.get("fw")?.substringAfterLast('.')?.toIntOrNull()
+            patch != null && patch >= SLAVE_FREE_PEAK_PATCH
+        }
+    }
+
     private fun voice(s: AmpState): String? {
         if (!(s.hasWsub || s.isWireless)) return null
         val msgs = ArrayList<String>()
@@ -309,8 +320,7 @@ object Diagnosis {
         }
         val v = s.voice
         if (v.on) {
-            val gain = (if (v.pkDb10 >= 0) (v.pkDb10 + 5) / 10 else (v.pkDb10 - 5) / 10)
-            if (gain > 4) msgs += "Peak gain +$gain dB tanpa limiter: batasi ≤ +4 dB dan volume agar driver tidak over-excursion."
+            if (v.pkDb10 > 40) msgs += "Peak gain +${v.pkDb10 / 10f} dB tanpa limiter: batasi ≤ +4 dB dan volume agar driver tidak over-excursion."
         }
         return if (msgs.isEmpty()) null else msgs.joinToString("\n")
     }
