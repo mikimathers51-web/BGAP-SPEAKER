@@ -27,8 +27,10 @@ object PresetTools {
         pkHz = v.pkHz.coerceIn(30, 150),
         pkDb10 = v.pkDb10.coerceIn(-60, 90),
         pkQ10 = v.pkQ10.coerceIn(5, 30),
-        harm = v.harm.coerceIn(0, 100),
-        limit = v.limit.coerceIn(50, 100),
+        // Firmware (slave >= 2.9.19) menolak harm != 0 atau limit != 100 (ERR wsub_voice harm_limit_unsupported):
+        // paksa ke nilai nonaktif agar preset impor lama tidak ditolak.
+        harm = 0,
+        limit = 100,
     )
 
     /** Samakan semua nilai dengan rentang yang diterima firmware; JSON hasil impor tidak dipercaya apa adanya. */

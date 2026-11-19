@@ -36,6 +36,14 @@ object BuiltinPresets {
         eq("Hangat", "Tambah 200–500 Hz, lembutkan 5–16 kHz.", listOf(0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, -1, -2, -2)),
         eq("Anti-desis", "Redam 3–16 kHz untuk rekaman yang tajam.", listOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -2, -2, -1)),
         eq("Game", "Angkat 1,2–8 kHz (langkah kaki, detail).", listOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 1, 0)),
+        eq("Akustik", "Hangat di 125–200 Hz, kehadiran dan udara 3–16 kHz untuk gitar/vokal.", listOf(0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 2, 2, 1, 1)),
+        eq("Jazz", "Bass bulat, mid netral, sedikit kilau di atas.", listOf(0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 2, 1, 1)),
+        eq("Rock", "Hentakan 80–125 Hz dan gitar tajam 1,2–5 kHz, mid rendah sedikit turun.", listOf(0, 0, 0, 2, 1, 0, -1, -1, 0, 1, 2, 3, 3, 2, 1)),
+        eq("Elektronik", "Kick 80–125 Hz kuat, hi-hat dan synth cerah 3–8 kHz.", listOf(0, 0, 0, 2, 1, 0, 0, -1, -1, 0, 1, 2, 3, 3, 2)),
+        eq("Klasik", "Hampir datar, sedikit udara di 5–16 kHz.", listOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2)),
+        eq("Berita / Siaran", "Kurangi bass, tegaskan 800 Hz–3 kHz agar ucapan jelas.", listOf(0, 0, 0, -2, -2, -1, 0, 1, 2, 3, 3, 2, 0, -1, -2)),
+        eq("Speaker meja", "Isi 80–200 Hz untuk speaker kecil jarak dekat (maks +2 dB).", listOf(0, 0, 0, 2, 2, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1)),
+        eq("Anti-gemuruh", "Kurangi 80–315 Hz saat ruangan bergema atau dinding dekat.", listOf(0, 0, 0, -2, -3, -2, -1, 0, 0, 0, 0, 0, 0, 0, 0)),
         voice(
             "Sub kecil (3–5\")", "HPF 45 Hz, peaking +3 dB di 60 Hz (slave ≥ 2.9.20; di 2.9.19 jatuh ke band 80 Hz).",
             VoiceParams(on = true, hpf = 45, pkHz = 60, pkDb10 = 30)
@@ -60,6 +68,14 @@ object BuiltinPresets {
             "Sub aman", "HPF 40 Hz, tanpa peaking — pilihan paling aman karena firmware tidak punya limiter.",
             VoiceParams(on = true, hpf = 40, pkHz = 60, pkDb10 = 0)
         ),
+        voice(
+            "Sub sedang (6–8\")", "HPF 35 Hz, peaking +2,5 dB di 55 Hz (Q 1,0). Kompromi aman untuk sub ukuran menengah.",
+            VoiceParams(on = true, hpf = 35, pkHz = 55, pkDb10 = 25, pkQ10 = 10)
+        ),
+        voice(
+            "Ruangan besar", "HPF 25 Hz, peaking +1 dB di 40 Hz. Bass dalam tanpa menambah gemuruh di ruang luas.",
+            VoiceParams(on = true, hpf = 25, pkHz = 40, pkDb10 = 10, pkQ10 = 10)
+        ),
         voice("Voicing OFF", "Matikan HPF subsonic dan peaking.", VoiceParams(on = false)),
         scene(
             "Malam (scene)", "EQ lembut + bass sub dikurangi 3 dB di 55 Hz. Tidak mengubah volume.",
@@ -80,6 +96,16 @@ object BuiltinPresets {
             "Pesta (scene)", "Bass tebal (+3,5 dB di 55 Hz) dan treble cerah. Pantau volume: tanpa limiter.",
             listOf(0, 0, 0, 1, 1, 0, -1, -1, 0, 0, 1, 2, 2, 2, 1),
             VoiceParams(on = true, hpf = 35, pkHz = 55, pkDb10 = 35, pkQ10 = 12)
+        ),
+        scene(
+            "Game (scene)", "Detail 1,2–8 kHz + bass +3 dB di 50 Hz. Tidak mengubah volume.",
+            listOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 1, 0),
+            VoiceParams(on = true, hpf = 35, pkHz = 50, pkDb10 = 30, pkQ10 = 10)
+        ),
+        scene(
+            "Elektronik (scene)", "Kick dan synth cerah + bass +3,5 dB di 50 Hz (Q 1,2). Pantau volume: tanpa limiter.",
+            listOf(0, 0, 0, 2, 1, 0, 0, -1, -1, 0, 1, 2, 3, 3, 2),
+            VoiceParams(on = true, hpf = 30, pkHz = 50, pkDb10 = 35, pkQ10 = 12)
         ),
     )
 }

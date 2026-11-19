@@ -208,7 +208,8 @@ data class VoiceParams(
     val harm: Int = 0,     // 0..100 (pembangkit harmonik)
     val limit: Int = 100,  // 50..100 (limiter lunak)
 ) {
-    fun command() = "wsub_voice ${if (on) 1 else 0} $hpf $pkHz $pkDb10 $pkQ10 $harm $limit"
+    // harm/limit selalu dikirim nonaktif (0/100): firmware menolak nilai lain.
+    fun command() = "wsub_voice ${if (on) 1 else 0} $hpf $pkHz $pkDb10 $pkQ10 0 100"
 }
 
 private val FAULT_BITS = listOf("OC-L", "OC-R", "DC-L", "DC-R", "UV", "OV", "CLK", "BQ", "CRC", "OT-SD", "OT-W")
