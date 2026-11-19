@@ -39,7 +39,8 @@ class PresetToolsTest {
             }
         }
         // Preset EQ baru (bukan 5 klasik) juga tidak boleh bergantung pada band yang dilewati
-        for (n in listOf("Satelit kecil", "Suara / Podcast", "Hangat", "Anti-desis", "Game")) {
+        for (n in listOf("Satelit kecil", "Suara / Podcast", "Hangat", "Anti-desis", "Game",
+            "Akustik", "Jazz", "Rock", "Elektronik", "Klasik", "Berita / Siaran", "Speaker meja", "Anti-gemuruh")) {
             val p = all.first { it.name == n }
             assertFalse(n, PresetTools.hasSkippedEffect(p, 4))
         }
@@ -65,7 +66,8 @@ class PresetToolsTest {
         assertEquals(240, p.standby); assertEquals(-60, p.trim)
         val v = p.voice!!
         assertEquals(20, v.hpf); assertEquals(150, v.pkHz); assertEquals(90, v.pkDb10)
-        assertEquals(5, v.pkQ10); assertEquals(100, v.harm); assertEquals(50, v.limit)
+        assertEquals(5, v.pkQ10); assertEquals(0, v.harm); assertEquals(100, v.limit)
+        assertEquals("wsub_voice 1 20 150 90 5 0 100", v.command())
     }
 
     @Test
