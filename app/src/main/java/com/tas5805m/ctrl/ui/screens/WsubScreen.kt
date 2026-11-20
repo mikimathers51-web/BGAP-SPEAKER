@@ -1,5 +1,6 @@
 package com.tas5805m.ctrl.ui.screens
 
+import com.tas5805m.ctrl.ui.components.PollWhileStarted
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -51,7 +52,7 @@ fun WsubScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 
     // Poll hanya saat tab ini tampil & tersambung. `status` berat (I2C baca fault + ±1,5 KB teks) → tiap 1,5 dtk;
     // `wlvl` murah (firmware: aman ±6×/dtk) → level sub per slave ±3×/dtk di sela-selanya.
-    LaunchedEffect(Unit) {
+    PollWhileStarted {
         var n = 0
         while (true) {
             delay(250)

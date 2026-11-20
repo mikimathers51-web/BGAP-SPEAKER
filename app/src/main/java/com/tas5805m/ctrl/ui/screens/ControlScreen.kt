@@ -1,5 +1,6 @@
 package com.tas5805m.ctrl.ui.screens
 
+import com.tas5805m.ctrl.ui.components.PollWhileStarted
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -55,7 +56,7 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     }
 
     // Level meter hidup: poll `lvl`/`lvl2` ±2×/dtk hanya selama layar Home tampil (baris LVL tidak masuk log).
-    LaunchedEffect(Unit) {
+    PollWhileStarted {
         while (true) {
             val s = vm.state.value
             if (s.hasLvl) spp.requestLvl()

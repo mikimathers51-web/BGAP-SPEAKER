@@ -1,5 +1,6 @@
 package com.tas5805m.ctrl.ui.screens
 
+import com.tas5805m.ctrl.data.ModRules
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -255,13 +256,13 @@ private fun ModCard(s: AmpState, spp: SppClient) {
     val mode = s.tag("MOD", "mode") ?: "bd"
     val freq = s.tag("MOD", "freq") ?: "768k"
     val bd = s.tag("MOD", "bd") ?: "80k"
-    DspCard("Modulasi PWM", "Ubah hanya bila paham: memengaruhi EMI, efisiensi, dan panas. Default: bd / 768k / 80k.") {
+    DspCard("Modulasi PWM", "Ubah hanya bila paham: memengaruhi EMI, efisiensi, dan panas. Default: bd / 768k / 80k. Bandwidth dibatasi otomatis sesuai datasheet (mis. 384k + Hybrid/1SPW hanya 80k).") {
         Text("Mode", style = MaterialTheme.typography.labelMedium)
-        ChoiceChips(listOf("BD" to "bd", "1SPW" to "1spw", "Hybrid" to "hybrid"), mode) { spp.setMod(it, freq, bd) }
+        ChoiceChips(listOf("BD" to "bd", "1SPW" to "1spw", "Hybrid" to "hybrid"), mode) { spp.setMod(it, freq, ModRules.clampBw(it, freq, bd)) }
         Text("Frekuensi switching", style = MaterialTheme.typography.labelMedium)
-        ChoiceChips(listOf("384k" to "384k", "480k" to "480k", "576k" to "576k", "768k" to "768k"), freq) { spp.setMod(mode, it, bd) }
-        Text("Frekuensi BD", style = MaterialTheme.typography.labelMedium)
-        ChoiceChips(listOf("80k" to "80k", "100k" to "100k", "120k" to "120k", "175k" to "175k"), bd) { spp.setMod(mode, freq, it) }
+        ChoiceChips(listOf("384k" to "384k", "480k" to "480k", "576k" to "576k", "768k" to "768k"), freq) { spp.setMod(mode, it, ModRules.clampBw(mode, it, bd)) }
+        Text("Bandwidth loop class-D", style = MaterialTheme.typography.labelMedium)
+        ChoiceChips(ModRules.allowedBw(mode, freq).map { it to it }, bd) { spp.setMod(mode, freq, it) }
     }
 }
 
