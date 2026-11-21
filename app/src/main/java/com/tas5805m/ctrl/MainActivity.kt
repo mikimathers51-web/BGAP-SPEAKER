@@ -61,8 +61,12 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.activity.SystemBarStyle
@@ -81,6 +85,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 private const val TAB_CONNECT = 0
 private const val TAB_HOME = 1
@@ -131,10 +136,14 @@ class MainActivity : ComponentActivity() {
                     snackbarHost = { SnackbarHost(snack) },
                     topBar = { StatusTopBar(state.connected, state.deviceName, reconnecting) },
                     bottomBar = {
-                        NavigationBar {
+                        NavigationBar(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            tonalElevation = 0.dp,
+                        ) {
                             val items = buildList {
                                 add(Triple("Koneksi", Icons.Default.Bluetooth, TAB_CONNECT))
-                                add(Triple("Home", Icons.Default.Tune, TAB_HOME))
+                                add(Triple("Kontrol", Icons.Default.Tune, TAB_HOME))
                                 add(Triple("EQ", Icons.Default.Equalizer, TAB_EQ))
                                 add(Triple("DSP", Icons.Default.GraphicEq, TAB_DSP))
                                 if (showWireless) add(Triple("Wireless", Icons.Default.SettingsRemote, TAB_WIRELESS))
@@ -146,8 +155,15 @@ class MainActivity : ComponentActivity() {
                                     selected = current == idx,
                                     onClick = { tab = idx },
                                     icon = { Icon(icon, contentDescription = label) },
-                                    alwaysShowLabel = items.size <= 6,   // 7 tab: label hanya untuk yang aktif agar muat
-                                    label = { Text(label, maxLines = 1) }
+                                    alwaysShowLabel = items.size <= 6,
+                                    label = { Text(label, maxLines = 1, fontSize = 10.sp) },
+                                    colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    ),
                                 )
                             }
                         }
@@ -199,11 +215,11 @@ fun DspAndPresetScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     }
 }
 
-/** Top bar: logo, "BGAP-SPEAKER", status mono + titik berdenyut (hijau = tersambung, kuning = menyambung ulang, merah = putus). */
+/** Top bar mengikuti HTML: logo speaker, "BGAP-SPEAKER", status mono + titik berdenyut. */
 @Composable
 private fun StatusTopBar(connected: Boolean, deviceName: String, reconnecting: Int) {
     val (color, label) = when {
-        connected -> OkGreen to "TAS5805M · ${deviceName.ifBlank { "terhubung" }}"
+        connected -> OkGreen to "TAS5805M · ${deviceName.ifBlank { "I²C OK" }}"
         reconnecting > 0 -> WarnAmber to "menyambung ulang ($reconnecting/5)…"
         else -> BadRed to "tidak terhubung"
     }
@@ -213,36 +229,99 @@ private fun StatusTopBar(connected: Boolean, deviceName: String, reconnecting: I
     )
     val primary = MaterialTheme.colorScheme.primary
     val amber = MaterialTheme.colorScheme.tertiary
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.background.copy(alpha = 0.95f),
+                        MaterialTheme.colorScheme.background.copy(alpha = 0.70f)
+                    )
+                )
+            )
+            .statusBarsPadding()
+    ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // Logo — sama seperti HTML (.logo)
             Box(
-                Modifier.size(38.dp)
-                    .background(Brush.linearGradient(listOf(primary.copy(alpha = 0.18f), amber.copy(alpha = 0.10f))), RoundedCornerShape(12.dp))
+                Modifier
+                    .size(38.dp)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(primary.copy(alpha = 0.18f), amber.copy(alpha = 0.10f))
+                        ),
+                        RoundedCornerShape(12.dp)
+                    )
                     .border(1.dp, primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                Canvas(Modifier.size(20.dp)) {   // ikon equalizer: 4 batang
-                    val w = size.width; val h = size.height
-                    listOf(0.15f to 0.55f, 0.38f to 0.9f, 0.62f to 0.4f, 0.85f to 0.7f).forEach { (x, level) ->
-                        drawLine(primary, Offset(w * x, h * (0.5f + level / 2)), Offset(w * x, h * (0.5f - level / 2)), strokeWidth = 2.4.dp.toPx(), cap = StrokeCap.Round)
+                // Ikon speaker (HTML svg path)
+                Canvas(Modifier.size(20.dp)) {
+                    val strokeColor = primary
+                    val sw = 2.dp.toPx()
+                    // cone
+                    val path = Path().apply {
+                        moveTo(size.width * 0.46f, size.height * 0.21f)
+                        lineTo(size.width * 0.25f, size.height * 0.38f)
+                        lineTo(size.width * 0.08f, size.height * 0.38f)
+                        lineTo(size.width * 0.08f, size.height * 0.62f)
+                        lineTo(size.width * 0.25f, size.height * 0.62f)
+                        lineTo(size.width * 0.46f, size.height * 0.79f)
+                        close()
                     }
+                    drawPath(path, strokeColor, style = Stroke(width = sw, join = StrokeJoin.Round))
+                    // sound waves
+                    drawArc(
+                        color = strokeColor,
+                        startAngle = -40f, sweepAngle = 80f,
+                        useCenter = false,
+                        topLeft = Offset(size.width * 0.42f, size.height * 0.28f),
+                        size = Size(size.width * 0.32f, size.height * 0.44f),
+                        style = Stroke(width = sw, cap = StrokeCap.Round)
+                    )
+                    drawArc(
+                        color = strokeColor,
+                        startAngle = -50f, sweepAngle = 100f,
+                        useCenter = false,
+                        topLeft = Offset(size.width * 0.52f, size.height * 0.16f),
+                        size = Size(size.width * 0.42f, size.height * 0.68f),
+                        style = Stroke(width = sw, cap = StrokeCap.Round)
+                    )
                 }
             }
             Column(Modifier.weight(1f)) {
-                Text("BGAP-SPEAKER", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Box(Modifier.size(6.dp).alpha(if (connected) pulse else 1f).background(color, CircleShape))
+                Text(
+                    "BGAP-SPEAKER",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .size(6.dp)
+                            .alpha(if (connected) pulse else 1f)
+                            .background(color, CircleShape)
+                    )
                     Text(
-                        label, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                        label,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
                     )
                 }
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     }
 }
