@@ -1,6 +1,6 @@
 package com.tas5805m.ctrl.ui.components
 
-import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.tas5805m.ctrl.ui.theme.AccentCyan
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -22,6 +23,8 @@ import kotlin.math.roundToInt
  *  - [live] = true  : kirim maksimal tiap [throttleMs] saat digeser + nilai akhir saat dilepas.
  *  - [live] = false : kirim HANYA nilai akhir saat dilepas (untuk xover / parameter yang menyetel ulang filter DSP).
  * Selama digeser dan sebentar setelah dilepas, thumb mengikuti jari (bukan nilai lama dari firmware), supaya tidak melompat.
+ *
+ * Warna default mengikuti HTML (cyan primary).
  */
 @Composable
 fun SendSlider(
@@ -33,10 +36,17 @@ fun SendSlider(
     live: Boolean = true,
     throttleMs: Long = 150L,
     enabled: Boolean = true,
-    colors: androidx.compose.material3.SliderColors = SliderDefaults.colors(),
+    colors: androidx.compose.material3.SliderColors? = null,
     /** Pembulatan nilai yang benar-benar dikirim (mis. ke Int); dipakai untuk membuang kiriman ganda. */
     snap: (Float) -> Float = { it },
 ) {
+    val sliderColors = colors ?: SliderDefaults.colors(
+        thumbColor = AccentCyan,
+        activeTrackColor = AccentCyan,
+        inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+        disabledThumbColor = AccentCyan.copy(alpha = 0.4f),
+        disabledActiveTrackColor = AccentCyan.copy(alpha = 0.3f),
+    )
     var local by remember { mutableStateOf<Float?>(null) }
     var dragging by remember { mutableStateOf(false) }
     var release by remember { mutableIntStateOf(0) }
@@ -75,7 +85,7 @@ fun SendSlider(
         valueRange = valueRange,
         steps = steps,
         enabled = enabled,
-        colors = colors,
+        colors = sliderColors,
         modifier = modifier,
     )
 }

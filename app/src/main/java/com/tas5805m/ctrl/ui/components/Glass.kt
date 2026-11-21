@@ -3,6 +3,7 @@ package com.tas5805m.ctrl.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -29,8 +30,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Kartu "kaca": gradasi tipis dari warna teks (putih di tema gelap, gelap di tema terang) + garis tepi halus.
- * Dipakai bersama oleh layar Home dan layar lain agar tampilannya seragam.
+ * Kartu "kaca" mengikuti desain HTML:
+ * - Gradient vertikal 0.07 → 0.03
+ * - Border 1px rgba(255,255,255,0.10)
+ * - Highlight line di atas (seperti ::before di HTML)
+ * - Radius 20dp
  */
 @Composable
 fun GlassCard(
@@ -40,20 +44,48 @@ fun GlassCard(
 ) {
     val ink = MaterialTheme.colorScheme.onSurface
     val shape = RoundedCornerShape(20.dp)
-    Column(
+    Box(
         modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(Brush.verticalGradient(listOf(ink.copy(alpha = 0.07f), ink.copy(alpha = 0.03f))), shape)
+            .background(
+                Brush.verticalGradient(
+                    listOf(ink.copy(alpha = 0.07f), ink.copy(alpha = 0.03f))
+                ),
+                shape
+            )
             .border(1.dp, ink.copy(alpha = 0.10f), shape)
-            .padding(contentPadding),
-        content = content,
-    )
+    ) {
+        // Top highlight line (HTML ::before)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .align(Alignment.TopCenter)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color.Transparent,
+                            ink.copy(alpha = 0.18f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+        Column(
+            Modifier.padding(contentPadding),
+            content = content
+        )
+    }
 }
 
 /** Judul kartu: huruf kapital kecil + (opsional) badge di kanan. */
 @Composable
-fun CardTitle(text: String, modifier: Modifier = Modifier, trailing: (@Composable () -> Unit)? = null) {
+fun CardTitle(
+    text: String,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null
+) {
     Row(
         modifier.fillMaxWidth().padding(bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -70,9 +102,13 @@ fun CardTitle(text: String, modifier: Modifier = Modifier, trailing: (@Composabl
     }
 }
 
-/** Lencana mono kecil (mis. "LR4", "Mode 2.1"). */
+/** Lencana mono kecil (mis. "from TAS5805M", "LR4", "Mode 2.1"). */
 @Composable
-fun GlassBadge(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.primary) {
+fun GlassBadge(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary
+) {
     val shape = RoundedCornerShape(8.dp)
     Text(
         text,
@@ -113,6 +149,58 @@ fun SwitchRow(
 /** Jarak antar bagian di dalam kartu. */
 @Composable
 fun GlassGap(h: Int = 12) = Spacer(Modifier.height(h.dp))
+
+/** Label section di luar kartu (HTML .section-label). */
+@Composable
+fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text.uppercase(),
+        modifier = modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.8.sp,
+        color = Color(0xFF64748B),
+    )
+}
+
+/**
+ * Metric cell (HTML .metric) — untuk baris Uptime / PVDD / Dropped / Latency.
+ */
+@Composable
+fun MetricCell(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+) {
+    val shape = RoundedCornerShape(14.dp)
+    val ink = MaterialTheme.colorScheme.onSurface
+    Column(
+        modifier
+            .clip(shape)
+            .background(ink.copy(alpha = 0.05f), shape)
+            .border(1.dp, ink.copy(alpha = 0.08f), shape)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            label.uppercase(),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.6.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            value,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            color = valueColor,
+            maxLines = 1,
+        )
+    }
+}
 
 /** Warna ListItem transparan agar tampil di atas [GlassCard] (default ListItem opak). */
 @Composable
