@@ -117,13 +117,16 @@ data class AmpState(
     val hasLvl2 get() = "lvl2" in caps
     val hasV3 get() = "v3" in caps
     val hasWsub get() = "wsub" in caps
+    val hasWsubTune get() = "wsub_tune" in caps
+    /** Nilai aktif `wsub_extra` dari baris WSUBT (`extra_max`); null bila belum ada. */
+    val wsubExtra: Int? get() = tagInt("WSUBT", "extra_max")
     val hasCtr get() = "ctr" in caps
     val hasSave get() = "save" in caps
     val hasSubInv get() = "subinv" in caps
     val hasStandby get() = "standby" in caps
     val hasEqc get() = "eqc" in caps
     val hasWlvl get() = "wlvl" in caps
-    val hasVoice get() = "wvoice" in caps || voiceKnown
+    val hasVoice get() = "wvoice" in caps || "voice_basic" in caps || voiceKnown
     val is21 get() = mode == 1 || mode == 2
     val is31 get() = mode == 3
     val isWireless get() = mode == 4
