@@ -36,6 +36,10 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tas5805m.ctrl.data.AmpState
 import com.tas5805m.ctrl.data.AppViewModel
@@ -240,12 +244,7 @@ private fun FillChartCard(fillMs: Int, targetMs: Int, samples: List<FillSample>)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Buffer Fill (real-time)", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.weight(1f))
-                Text(
-                    "$fillMs ms",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                FillRing(fillMs = fillMs, targetMs = targetMs)
             }
             Text(
                 "Target ≈ $targetMs ms  ·  ${samples.size} titik",
@@ -274,6 +273,39 @@ private fun FillChartCard(fillMs: Int, targetMs: Int, samples: List<FillSample>)
                 )
             }
         }
+    }
+}
+
+/** Gauge lingkaran ala preview: busur terisi sesuai fill/target, angka ms di tengah. */
+@Composable
+private fun FillRing(fillMs: Int, targetMs: Int, modifier: Modifier = Modifier) {
+    val progress = if (targetMs > 0) (fillMs.toFloat() / (targetMs * 1.5f)).coerceIn(0f, 1f) else 0f
+    val color = when {
+        fillMs <= 0 -> BadRed
+        fillMs < targetMs * 0.5f -> WarnAmber
+        fillMs > targetMs * 1.3f -> Color(0xFF4FC3F7)
+        else -> OkGreen
+    }
+    val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    Box(modifier.size(64.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = 4.dp.toPx()
+            val inset = stroke / 2f
+            val arcSize = Size(size.width - stroke, size.height - stroke)
+            drawArc(track, 0f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
+            drawArc(color, -90f, 360f * progress, false, Offset(inset, inset), arcSize,
+                style = Stroke(stroke, cap = StrokeCap.Round))
+        }
+        Text(
+            buildAnnotatedString {
+                append("$fillMs")
+                withStyle(SpanStyle(fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)) { append("ms") }
+            },
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp,
+            color = color,
+        )
     }
 }
 

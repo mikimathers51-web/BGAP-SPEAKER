@@ -28,6 +28,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -354,16 +360,14 @@ private fun FaultCard(s: AmpState) {
             for (chip in 1..2) {
                 if (chip == 2 && kv2 == null) continue
                 Text("Chip $chip", style = MaterialTheme.typography.labelMedium)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (k in FAULT_KEYS) {
-                        val active = if (chip == 1) (s.faults[k] ?: 0) == 1 else kv2?.get(k) == "1"
-                        AssistChip(
-                            onClick = {},
-                            label = { Text(Diagnosis.faultLabel(k), fontSize = 11.sp) },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = if (active) ColErr.copy(alpha = 0.35f) else Color.Transparent,
-                            ),
-                        )
+                FAULT_KEYS.chunked(4).forEach { rowKeys ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (k in rowKeys) {
+                            val active = if (chip == 1) (s.faults[k] ?: 0) == 1 else kv2?.get(k) == "1"
+                            FaultCell(Diagnosis.faultLabel(k), active, Modifier.weight(1f))
+                        }
+                        // isi sisa kolom agar lebar sel seragam
+                        repeat(4 - rowKeys.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
@@ -381,6 +385,30 @@ private fun FaultCard(s: AmpState) {
                 }
             }
         }
+    }
+}
+
+/** Sel fault ala preview: ikon centang/peringatan + nama + status OK/FAULT. */
+@Composable
+private fun FaultCell(name: String, active: Boolean, modifier: Modifier = Modifier) {
+    val c = if (active) ColErr else ColOk
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+    Column(
+        modifier
+            .clip(shape)
+            .background(c.copy(alpha = 0.08f), shape)
+            .border(1.dp, c.copy(alpha = 0.28f), shape)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            if (active) Icons.Default.Warning else Icons.Default.Check,
+            contentDescription = null,
+            tint = c,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(name, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(if (active) "FAULT" else "OK", fontSize = 9.sp, color = c, fontFamily = FontFamily.Monospace)
     }
 }
 
