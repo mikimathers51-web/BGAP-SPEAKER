@@ -173,31 +173,33 @@ fun MetricCell(
     modifier: Modifier = Modifier,
     valueColor: Color = MaterialTheme.colorScheme.onSurface,
 ) {
+    // Mirip HTML .metric — kartu gelap, label kecil uppercase, nilai mono tebal
     val shape = RoundedCornerShape(14.dp)
     val ink = MaterialTheme.colorScheme.onSurface
     Column(
         modifier
             .clip(shape)
-            .background(ink.copy(alpha = 0.05f), shape)
+            .background(ink.copy(alpha = 0.04f), shape)
             .border(1.dp, ink.copy(alpha = 0.08f), shape)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             label.uppercase(),
-            fontSize = 10.sp,
+            fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.6.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 0.8.sp,
+            color = Color(0xFF64748B),
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(6.dp))
         Text(
             value,
-            fontSize = 16.sp,
+            fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
             color = valueColor,
             maxLines = 1,
+            letterSpacing = (-0.3).sp,
         )
     }
 }
