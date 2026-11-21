@@ -43,6 +43,7 @@ class SppClient(private val context: Context) {
 
         /** Perintah poll: tidak dicatat di log TX. */
         private val POLL_CMDS = setOf("lvl", "lvl2", "wlvl", "status")
+        private const val MAX_QUEUED_POLL_GUARD = 40
 
         /** Format angka desimal SELALU dengan titik (Locale.US) — HP berlokal id-ID memakai koma, firmware tidak paham. */
         fun f1(v: Float): String = String.format(Locale.US, "%.1f", v)
@@ -83,6 +84,12 @@ class SppClient(private val context: Context) {
             Log.e(TAG, "refreshBonded", e)
         }
     }
+
+    /** Perangkat dari alamat MAC tersimpan (untuk sambung otomatis); null bila alamat/izin tidak valid. */
+    @SuppressLint("MissingPermission")
+    fun remoteDevice(address: String): BluetoothDevice? = try {
+        if (BluetoothAdapter.checkBluetoothAddress(address)) adapter?.getRemoteDevice(address) else null
+    } catch (e: Exception) { Log.e(TAG, "remoteDevice", e); null }
 
     @SuppressLint("MissingPermission")
     suspend fun connect(device: BluetoothDevice): Boolean = withContext(Dispatchers.IO) {
@@ -128,10 +135,13 @@ class SppClient(private val context: Context) {
 
     private fun startWriter(sock: BluetoothSocket) {
         while (outbox.tryReceive().isSuccess) { /* buang sisa antrean sesi lama */ }
+        queued.set(0); pendingPolls.clear()
         writerJob = scope.launch {
             try {
                 val out = sock.outputStream
                 for (cmd in outbox) {
+                    if (queued.decrementAndGet() < 0) queued.set(0)
+                    pendingPolls.remove(cmd.trim())
                     out.write((cmd.trim() + "\n").toByteArray(Charsets.UTF_8))
                     out.flush()
                     Log.d(TAG, ">> $cmd")
@@ -170,15 +180,24 @@ class SppClient(private val context: Context) {
         }
     }
 
+    /** Poll yang sudah mengantre tidak diantrekan lagi (mencegah antrean membengkak saat link macet). */
+    private val pendingPolls = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val queued = java.util.concurrent.atomic.AtomicInteger(0)
+
     fun send(cmd: String) {
         if (socket == null || otaBusy) return   // selama OTA stream mentah: tidak boleh ada perintah/poll nyasar
-        outbox.trySend(cmd)
+        val c = cmd.trim()
+        if (c in POLL_CMDS) {
+            if (queued.get() >= MAX_QUEUED_POLL_GUARD) return   // link macet: jangan menumpuk poll
+            if (!pendingPolls.add(c)) return                    // poll sama masih menunggu giliran
+        }
+        if (outbox.trySend(cmd).isSuccess) queued.incrementAndGet() else pendingPolls.remove(c)
     }
 
     /** Dipakai alur OTA saja (melewati penjaga otaBusy). */
     private fun sendOta(cmd: String) {
         if (socket == null) return
-        outbox.trySend(cmd)
+        if (outbox.trySend(cmd).isSuccess) queued.incrementAndGet()
     }
 
     private fun drainOta() { while (otaLines.tryReceive().isSuccess) { /* buang sisa */ } }
@@ -306,6 +325,8 @@ class SppClient(private val context: Context) {
         send(if (mac == null) "wsub_unpair" else "wsub_unpair $mac")
     fun wsubUnpairAll() = send("wsub_unpair_all")
     fun wsubTrim(ms: Int) = send("wsub_trim ${ms.coerceIn(-60, 100)}")
+    /** Firmware ≥ 2.9.21 (CAPS `wsub_tune`): batas tambahan latensi penyelarasan sub, 0…200 ms. */
+    fun wsubExtra(ms: Int) = send("wsub_extra ${ms.coerceIn(0, 200)}")
     fun wsubDiagReset() = send("wsub_diag_reset")
     fun setVoice(v: VoiceParams) {
         // Optimistis: UI memegang v terbaru sebelum firmware membalas `WSUBV`. Tanpa ini slider kedua yang digeser

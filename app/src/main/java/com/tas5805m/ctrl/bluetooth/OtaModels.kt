@@ -63,6 +63,8 @@ object OtaProtocol {
         line.contains("ota_timeout") -> "Perangkat berhenti menerima data (waktu habis)"
         line.contains("ota_busy") -> "OTA lain sedang berjalan"
         line.contains("ota_begin") -> "Perangkat tidak bisa memulai OTA"
+        line.contains("ota_nvs") -> "Perangkat gagal menyimpan sandi baru (NVS)"
+        line.contains("ota_args") -> "Perintah OTA tidak lengkap"
         line.contains("ota_pw_len") -> "Sandi baru harus 4–32 karakter tanpa spasi"
         else -> line
     }
