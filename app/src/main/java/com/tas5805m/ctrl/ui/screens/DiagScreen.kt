@@ -222,7 +222,8 @@ fun DiagScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             val peers = state.peerDetails
             val avgLat = peers.mapNotNull { p -> p.fillMs.takeIf { it > 0 } }.let { if (it.isEmpty()) state.wsubLat else it.average().toInt() }
             val dropped = peers.sumOf { it.und + it.gap }.coerceAtLeast(state.wsubUnd + state.wsubGap)
-            val uptimeStr = state.peerDetails.firstOrNull { it.upSec >= 0 }?.let { sec ->
+            val uptimeStr = state.peerDetails.firstOrNull { it.upSec >= 0 }?.let { peer ->
+                val sec = peer.upSec
                 val h = sec / 3600; val m = (sec % 3600) / 60; val s = sec % 60
                 "%02d:%02d:%02d".format(h, m, s)
             } ?: "—"

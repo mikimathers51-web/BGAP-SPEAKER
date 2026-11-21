@@ -1,4 +1,4 @@
-package com.bgap.speaker.ui.monitor
+package com.tas5805m.ctrl.ui.screens
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
