@@ -31,6 +31,21 @@ val TextSecondary  = Color(0xFFCBD5E1)
 val TextMuted      = Color(0xFF94A3B8)   // HTML --muted
 val TextDim        = Color(0xFF64748B)
 
+/** Palet meter / level (dipakai LevelMeter). */
+object BgapColors {
+    val Danger = BadRed
+    val Warn = WarnAmber
+    val TextMuted = com.tas5805m.ctrl.ui.theme.TextMuted
+    val TextSecondary = com.tas5805m.ctrl.ui.theme.TextSecondary
+    val TextDim = com.tas5805m.ctrl.ui.theme.TextDim
+    val MeterGreen = Color(0xFF22C55E)
+    val MeterLime = Color(0xFF84CC16)
+    val MeterYellow = Color(0xFFEAB308)
+    val MeterOrange = Color(0xFFF59E0B)
+    val MeterRed = Color(0xFFEF4444)
+    val MeterSubStart = Color(0xFF06B6D4)
+}
+
 // ========================================================
 // ThemeMode — enum pilihan user
 // ========================================================
