@@ -31,14 +31,23 @@ val TextMuted      = Color(0xFF94A3B8)
 val TextDim        = Color(0xFF64748B)
 
 // ========================================================
-// Local dark-mode flag + `resolveDark` untuk dipakai di MainActivity
+// ThemeMode — enum pilihan user
 // ========================================================
-private val LocalResolveDark = compositionLocalOf { true }
-
-val resolveDark: Boolean
-    @Composable get() = LocalResolveDark.current
-
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+// ========================================================
+// resolveDark — function (bukan property) supaya bisa
+// dipanggil `resolveDark(settings.theme)` dari MainActivity
+// ========================================================
+@Composable
+fun resolveDark(mode: ThemeMode): Boolean = when (mode) {
+    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    ThemeMode.DARK   -> true
+    ThemeMode.LIGHT  -> false
+}
+
+// Local dark-mode flag untuk diakses di subtree
+private val LocalResolveDark = compositionLocalOf { true }
 
 // ========================================================
 // Color schemes
@@ -47,6 +56,7 @@ private val AmoledDarkColors = darkColorScheme(
     primary          = AccentCyan,
     onPrimary        = Color(0xFF001824),
     secondary        = AccentAmber,
+    tertiary         = AccentAmber,
     onSecondary      = Color(0xFF1F1300),
     background       = Color.Black,
     onBackground     = TextPrimary,
@@ -55,35 +65,46 @@ private val AmoledDarkColors = darkColorScheme(
     surfaceVariant   = DarkSurfaceVar,
     onSurfaceVariant = TextMuted,
     outline          = Color(0xFF334155),
+    outlineVariant   = Color(0xFF1E293B),
     error            = BadRed,
     onError          = Color.Black
 )
 
 private val LightColors = lightColorScheme(
-    primary    = Color(0xFF0369A1),
-    secondary  = Color(0xFFB45309),
-    background = Color(0xFFF8FAFC),
-    surface    = Color.White,
-    onSurface  = Color(0xFF0F172A)
+    primary          = Color(0xFF0369A1),
+    secondary        = Color(0xFFB45309),
+    tertiary         = Color(0xFFB45309),
+    background       = Color(0xFFF8FAFC),
+    onBackground     = Color(0xFF0F172A),
+    surface          = Color.White,
+    onSurface        = Color(0xFF0F172A),
+    surfaceVariant   = Color(0xFFF1F5F9),
+    onSurfaceVariant = Color(0xFF475569),
+    outline          = Color(0xFFCBD5E1),
+    outlineVariant   = Color(0xFFE2E8F0),
+    error            = Color(0xFFDC2626)
 )
 
 // ========================================================
-// TasTheme — entry point tema
+// TasTheme — signature: (ThemeMode, Boolean, content)
 // ========================================================
 @Composable
 fun TasTheme(
-    dark: Boolean = isSystemInDarkTheme(),
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    val dark = when (themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.DARK   -> true
+        ThemeMode.LIGHT  -> false
+    }
     val context = LocalContext.current
     val scheme = when {
-        dark && dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            dynamicDarkColorScheme(context)
-        !dark && dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            dynamicLightColorScheme(context)
-        dark -> AmoledDarkColors
-        else -> LightColors
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+            if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        dark  -> AmoledDarkColors
+        else  -> LightColors
     }
     CompositionLocalProvider(LocalResolveDark provides dark) {
         MaterialTheme(colorScheme = scheme, content = content)
