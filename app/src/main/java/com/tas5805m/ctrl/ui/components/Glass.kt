@@ -1,0 +1,119 @@
+package com.tas5805m.ctrl.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ListItemColors
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+/**
+ * Kartu "kaca": gradasi tipis dari warna teks (putih di tema gelap, gelap di tema terang) + garis tepi halus.
+ * Dipakai bersama oleh layar Home dan layar lain agar tampilannya seragam.
+ */
+@Composable
+fun GlassCard(
+    modifier: Modifier = Modifier,
+    contentPadding: Dp = 16.dp,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val ink = MaterialTheme.colorScheme.onSurface
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(ink.copy(alpha = 0.07f), ink.copy(alpha = 0.03f))), shape)
+            .border(1.dp, ink.copy(alpha = 0.10f), shape)
+            .padding(contentPadding),
+        content = content,
+    )
+}
+
+/** Judul kartu: huruf kapital kecil + (opsional) badge di kanan. */
+@Composable
+fun CardTitle(text: String, modifier: Modifier = Modifier, trailing: (@Composable () -> Unit)? = null) {
+    Row(
+        modifier.fillMaxWidth().padding(bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text.uppercase(),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.6.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (trailing != null) trailing()
+    }
+}
+
+/** Lencana mono kecil (mis. "LR4", "Mode 2.1"). */
+@Composable
+fun GlassBadge(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.primary) {
+    val shape = RoundedCornerShape(8.dp)
+    Text(
+        text,
+        modifier
+            .background(color.copy(alpha = 0.10f), shape)
+            .border(1.dp, color.copy(alpha = 0.25f), shape)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        fontFamily = FontFamily.Monospace,
+        fontSize = 10.sp,
+        color = color,
+        maxLines = 1,
+    )
+}
+
+/** Baris judul + keterangan + Switch (seperti baris toggle pada prototipe). */
+@Composable
+fun SwitchRow(
+    title: String,
+    sub: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    Row(
+        modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+    }
+}
+
+/** Jarak antar bagian di dalam kartu. */
+@Composable
+fun GlassGap(h: Int = 12) = Spacer(Modifier.height(h.dp))
+
+/** Warna ListItem transparan agar tampil di atas [GlassCard] (default ListItem opak). */
+@Composable
+fun glassListItemColors(): ListItemColors = ListItemDefaults.colors(containerColor = Color.Transparent)
