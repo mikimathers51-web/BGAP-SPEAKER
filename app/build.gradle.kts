@@ -12,8 +12,8 @@ android {
         applicationId = "com.tas5805m.ctrl"
         minSdk = 26
         targetSdk = 35
-        versionCode = (System.getenv("VERSION_CODE") ?: "43").toInt()
-        versionName = System.getenv("VERSION_NAME") ?: "3.12.1"
+        versionCode = (System.getenv("VERSION_CODE") ?: "44").toInt()
+        versionName = System.getenv("VERSION_NAME") ?: "3.13.0"
     }
 
     // Tanda tangan rilis: isi secret KEYSTORE_B64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD di GitHub (lihat build.yml).
