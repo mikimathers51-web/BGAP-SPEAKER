@@ -12,6 +12,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.tas5805m.ctrl.data.ThemeMode
 
 // ========================================================
 // Palet warna yang dipakai semua screen
@@ -33,7 +34,6 @@ val TextDim        = Color(0xFF64748B)
 // ========================================================
 // ThemeMode — enum pilihan user
 // ========================================================
-enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 // ========================================================
 // resolveDark — function (bukan property) supaya bisa
