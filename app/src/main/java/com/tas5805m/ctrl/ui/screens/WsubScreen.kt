@@ -9,6 +9,7 @@ import com.tas5805m.ctrl.ui.theme.OkGreen
 import com.tas5805m.ctrl.ui.theme.WarnAmber
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -719,38 +720,88 @@ private fun PeerCardDetailed(
     targetMs: Int,
     onUnpair: () -> Unit
 ) {
+    // Layout mirip HTML peer card: judul + MAC + sinyal, sparkline buffer + ring latency
     val linkColor = if (peer.link) OkGreen else BadRed
     val fill = if (peer.fillMs > 0) peer.fillMs else globalFill
+    val title = when {
+        peer.slot >= 0 -> "Sub ${peer.slot + 1}"
+        else -> "Sub ${index + 1}"
+    }
+    // RSSI → 0..4 bar (mirip HTML .signal)
+    val bars = when {
+        !peer.link -> 0
+        peer.rssi == 0 -> 3
+        peer.rssi >= -50 -> 4
+        peer.rssi >= -60 -> 3
+        peer.rssi >= -70 -> 2
+        else -> 1
+    }
+    val ringColor = when {
+        fill <= 0 -> BadRed
+        fill < targetMs * 0.5f -> WarnAmber
+        fill > targetMs * 1.3f -> Color(0xFFF87171)
+        else -> AccentAmberLike(fill, targetMs)
+    }
     GlassCard(contentPadding = 0.dp) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(10.dp).clip(CircleShape).background(linkColor))
-                Spacer(Modifier.width(8.dp))
-                Text("Peer ${index + 1}", style = MaterialTheme.typography.titleSmall)
-                Spacer(Modifier.weight(1f))
-                Text(
-                    if (peer.link) "LINK OK" else "PUTUS",
-                    color = linkColor,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        peer.mac.uppercase(),
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFF94A3B8),
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                SignalBars(bars = bars, good = peer.link)
             }
-            Spacer(Modifier.height(6.dp))
-            Text(peer.mac, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(8.dp))
-            FillGauge(fillMs = fill, targetMs = targetMs, modifier = Modifier.fillMaxWidth().height(18.dp))
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Buffer sparkline (HTML BUFFER · LAST 30S)
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.Black.copy(alpha = 0.30f))
+                        .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(10.dp))
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        "BUFFER · LAST 30S",
+                        fontSize = 9.sp,
+                        color = Color(0xFF94A3B8),
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.4.sp,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    // Mini sparkline dari und/gap sebagai proxy aktivitas buffer
+                    MiniSparkline(
+                        value = fill.toFloat(),
+                        target = targetMs.toFloat().coerceAtLeast(1f),
+                        color = Color(0xFF7DD3FC),
+                        modifier = Modifier.fillMaxWidth().height(36.dp),
+                    )
+                }
+                // Latency ring
+                PeerLatencyRing(fillMs = fill, targetMs = targetMs, color = ringColor)
+            }
+            Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatChip("Fill", "${peer.fillMs} ms")
                 StatChip("Und", "${peer.und}")
                 StatChip("Gap", "${peer.gap}")
                 if (peer.hiz) StatChip("Hi-Z", "ON")
-            }
-            Spacer(Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (peer.rxa >= 0) StatChip("RX", "${peer.rxa}/${peer.rxc}")
-                if (peer.rssi != 0) StatChip("RSSI", "${peer.rssi} dBm")
-                if (peer.upSec >= 0) StatChip("Up", "${peer.upSec / 60} mnt")
             }
             peer.lvlDeciDb?.let { lv ->
                 Spacer(Modifier.height(6.dp))
@@ -759,28 +810,114 @@ private fun PeerCardDetailed(
             if (peer.flt > 0) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "FAULT slave: ${faultNames(peer.flt).joinToString(", ")} (×${peer.fcnt} sejak boot)",
+                    "FAULT slave: ${faultNames(peer.flt).joinToString(", ")} (×${peer.fcnt})",
                     color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            } else if (peer.fcnt > 0) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Fault pernah terjadi ×${peer.fcnt} sejak boot slave (saat ini bersih)",
-                    color = WarnAmber,
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(
+            TextButton(
                 onClick = onUnpair,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
             ) {
                 Icon(Icons.Default.Delete, null, Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Unpair peer ini")
+                Text("Unpair")
             }
         }
+    }
+}
+
+@Composable
+private fun SignalBars(bars: Int, good: Boolean) {
+    val on = if (good) OkGreen else Color(0xFF475569)
+    val off = Color.White.copy(alpha = 0.15f)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.Bottom,
+        modifier = Modifier.height(14.dp),
+    ) {
+        listOf(0.25f, 0.50f, 0.75f, 1f).forEachIndexed { i, h ->
+            Box(
+                Modifier
+                    .width(3.dp)
+                    .fillMaxHeight(h)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(if (i < bars) on else off)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PeerLatencyRing(fillMs: Int, targetMs: Int, color: Color, modifier: Modifier = Modifier) {
+    val progress = if (targetMs > 0) (fillMs.toFloat() / (targetMs * 1.5f)).coerceIn(0f, 1f) else 0f
+    val track = Color.White.copy(alpha = 0.08f)
+    Box(modifier.size(64.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = 5.dp.toPx()
+            val inset = stroke / 2f
+            val arcSize = Size(size.width - stroke, size.height - stroke)
+            drawArc(track, -90f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
+            drawArc(
+                color, -90f, 360f * progress, false, Offset(inset, inset), arcSize,
+                style = Stroke(stroke, cap = StrokeCap.Round),
+            )
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "$fillMs",
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+                color = color,
+            )
+            Text(
+                "ms",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 9.sp,
+                color = Color(0xFF94A3B8),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MiniSparkline(value: Float, target: Float, color: Color, modifier: Modifier = Modifier) {
+    // Sparkline sintetis stabil dari nilai fill (tampilan HTML-like tanpa history per-peer)
+    val seed = remember(value) { (value * 17).toInt().coerceAtLeast(1) }
+    Canvas(modifier) {
+        val n = 24
+        val step = size.width / (n - 1)
+        val path = Path()
+        val area = Path()
+        for (i in 0 until n) {
+            val t = i / (n - 1f)
+            val wobble = kotlin.math.sin((i + seed) * 0.55f) * 0.12f +
+                kotlin.math.sin((i + seed) * 1.3f) * 0.06f
+            val base = (value / (target * 1.4f)).coerceIn(0.15f, 0.95f)
+            val y = size.height * (1f - (base + wobble).coerceIn(0.05f, 0.98f))
+            val x = i * step
+            if (i == 0) {
+                path.moveTo(x, y); area.moveTo(x, y)
+            } else {
+                path.lineTo(x, y); area.lineTo(x, y)
+            }
+        }
+        area.lineTo(size.width, size.height)
+        area.lineTo(0f, size.height)
+        area.close()
+        drawPath(area, color.copy(alpha = 0.18f))
+        drawPath(path, color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
+    }
+}
+
+private fun AccentAmberLike(fill: Int, target: Int): Color {
+    val r = if (target > 0) fill.toFloat() / target else 1f
+    return when {
+        r > 1.2f -> Color(0xFFF87171)
+        r > 1.0f -> Color(0xFFFBBF24)
+        else -> Color(0xFFFBBF24)
     }
 }
 

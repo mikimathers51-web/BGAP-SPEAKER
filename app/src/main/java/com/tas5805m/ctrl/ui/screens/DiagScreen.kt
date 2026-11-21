@@ -229,11 +229,16 @@ fun DiagScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             } ?: "—"
             val pvdd = state.tags["PVDD"]?.get("v") ?: state.tags["INFO"]?.get("pvdd") ?: "—"
             Spacer(Modifier.height(4.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MetricCell("Uptime", uptimeStr, Modifier.weight(1f), AccentCyan)
-                MetricCell("PVDD", if (pvdd == "—") "—" else "$pvdd V", Modifier.weight(1f), ColOk)
-                MetricCell("Dropped", "$dropped", Modifier.weight(1f), if (dropped > 0) ColWarn else ColOk)
-                MetricCell("Latency AVG", "${avgLat} ms", Modifier.weight(1f), AccentCyan)
+            // Grid 2×2 seperti HTML .metrics
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MetricCell("Uptime", uptimeStr, Modifier.weight(1f), AccentCyan)
+                    MetricCell("PVDD", if (pvdd == "—") "—" else "$pvdd V", Modifier.weight(1f), ColOk)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MetricCell("Dropped", "$dropped", Modifier.weight(1f), if (dropped > 0) ColWarn else ColOk)
+                    MetricCell("Latency AVG", "${avgLat} ms", Modifier.weight(1f), AccentCyan)
+                }
             }
         }
 
@@ -480,31 +485,63 @@ private fun FaultStatusCell(
     modifier: Modifier = Modifier,
     warnOnly: Boolean = false,
 ) {
+    // Mirip HTML .fault-cell — ikon di kotak, nama mono, status tebal, detail kecil
     val c = when {
         active && !warnOnly -> ColErr
         warnOnly -> ColWarn
         else -> ColOk
     }
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(12.dp)
+    val iconBg = c.copy(alpha = 0.15f)
+    val cellBg = c.copy(alpha = if (warnOnly) 0.06f else if (active) 0.08f else 0.04f)
+    val borderC = c.copy(alpha = if (warnOnly) 0.30f else if (active) 0.40f else 0.25f)
     Column(
         modifier
             .clip(shape)
-            .background(c.copy(alpha = 0.08f), shape)
-            .border(1.dp, c.copy(alpha = 0.30f), shape)
-            .padding(vertical = 14.dp, horizontal = 8.dp),
+            .background(cellBg, shape)
+            .border(1.dp, borderC, shape)
+            .padding(vertical = 12.dp, horizontal = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(
-            if (active || warnOnly) Icons.Default.Warning else Icons.Default.CheckCircle,
-            contentDescription = null,
-            tint = c,
-            modifier = Modifier.size(22.dp),
-        )
+        Box(
+            Modifier
+                .size(22.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(iconBg),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (active || warnOnly) Icons.Default.Warning else Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = c,
+                modifier = Modifier.size(12.dp),
+            )
+        }
         Spacer(Modifier.height(6.dp))
-        Text(name, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-        Text(status, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c, fontFamily = FontFamily.Monospace)
-        if (detail != "—") {
-            Text(detail, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace)
+        Text(
+            name.uppercase(),
+            fontSize = 10.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            color = Color(0xFF94A3B8),
+        )
+        Text(
+            status,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = c,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        if (detail.isNotBlank() && detail != "—") {
+            Text(
+                detail,
+                fontSize = 9.sp,
+                color = Color(0xFF64748B),
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.padding(top = 3.dp),
+            )
         }
     }
 }
