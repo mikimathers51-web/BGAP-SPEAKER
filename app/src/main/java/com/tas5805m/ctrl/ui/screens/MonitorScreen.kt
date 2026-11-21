@@ -4,6 +4,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,16 +25,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tas5805m.ctrl.data.AppViewModel
+import com.tas5805m.ctrl.ui.components.CardTitle
+import com.tas5805m.ctrl.ui.components.GlassBadge
+import com.tas5805m.ctrl.ui.components.GlassCard
 import com.tas5805m.ctrl.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlin.math.sin
 
 /**
- * Monitor screen dengan level meter real-time (PEAK / RMS).
- * Signature sesuai MainActivity: MonitorScreen(vm, Modifier.padding(padding))
- *
- * `vm` diterima untuk kompatibilitas & future hook (mis. baca level dari
- * TAS5805M register via I²C). Untuk sekarang meter disimulasikan lokal.
+ * Monitor screen — level meter real-time (PEAK / RMS).
+ * Visual diselaraskan dengan prototipe HTML (glass card, badge, meter gradient, readout besar).
  */
 @Composable
 fun MonitorScreen(
@@ -88,10 +90,10 @@ fun MonitorScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(scroll)
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Mode toggle
+        // Mode toggle PEAK / RMS (seperti HTML)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -109,13 +111,19 @@ fun MonitorScreen(
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (active) AccentCyan.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.05f))
+                        .border(
+                            1.dp,
+                            if (active) AccentCyan.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.08f),
+                            RoundedCornerShape(10.dp)
+                        )
+                        .clickable { isRms = rms }
                         .padding(vertical = 8.dp)
                 )
             }
         }
 
-        // Master
-        GlassPanel {
+        // ── Master Output ──────────────────────────────────
+        GlassCard {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -143,40 +151,82 @@ fun MonitorScreen(
             Row(
                 modifier = Modifier.fillMaxWidth().height(180.dp),
                 verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // L / R vertical meters
                 MeterPair(
                     leftLevel = masterL, rightLevel = masterR,
                     leftPeak = masterLPeak, rightPeak = masterRPeak
                 )
-                Spacer(Modifier.width(4.dp))
+                // dB scale
                 Column(
-                    modifier = Modifier.height(160.dp),
+                    modifier = Modifier.height(150.dp).padding(bottom = 18.dp),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    listOf("0", "−6", "−12", "−24", "−36", "−48", "−60").forEach {
+                    listOf("0", "−12", "−24", "−36", "−48", "−60").forEach {
                         Text(it, color = TextDim, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                     }
                 }
+                // Big readout (mirip screenshot: angka besar di kanan)
                 Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.SpaceEvenly
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.End
                 ) {
-                    Readout("L", masterL)
-                    Readout("R", masterR)
-                    Readout("PK", maxOf(masterLPeak, masterRPeak), 14.sp)
+                    val peak = maxOf(masterLPeak, masterRPeak)
+                    Text(
+                        "R",
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                    Text(
+                        fmtDb(masterR),
+                        color = dbColor(masterR),
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = (-1).sp
+                    )
+                    Text(
+                        "dB",
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "PK  ",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            fmtDb(peak),
+                            color = dbColor(peak),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            " dB",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             }
         }
 
-        // Channels
-        GlassPanel {
-            Text(
-                "CHANNELS",
-                color = TextMuted, fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp
+        // ── Channels ───────────────────────────────────────
+        GlassCard {
+            CardTitle(
+                text = "Channels",
+                trailing = { GlassBadge("from TAS5805M") }
             )
-            Spacer(Modifier.height(12.dp))
             Row(
                 modifier = Modifier.fillMaxWidth().height(160.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -190,26 +240,10 @@ fun MonitorScreen(
 }
 
 @Composable
-private fun GlassPanel(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = 0.07f), Color.White.copy(alpha = 0.03f))
-                )
-            )
-            .padding(16.dp),
-        content = content
-    )
-}
-
-@Composable
 private fun MeterPair(leftLevel: Float, rightLevel: Float, leftPeak: Float, rightPeak: Float) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            VerticalMeter(leftLevel, leftPeak, Modifier.width(26.dp).height(150.dp))
+            VerticalMeter(leftLevel, leftPeak, Modifier.width(28.dp).height(150.dp))
             Spacer(Modifier.height(6.dp))
             Text(
                 "L", color = TextMuted, fontSize = 10.sp,
@@ -217,7 +251,7 @@ private fun MeterPair(leftLevel: Float, rightLevel: Float, leftPeak: Float, righ
             )
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            VerticalMeter(rightLevel, rightPeak, Modifier.width(26.dp).height(150.dp))
+            VerticalMeter(rightLevel, rightPeak, Modifier.width(28.dp).height(150.dp))
             Spacer(Modifier.height(6.dp))
             Text(
                 "R", color = TextMuted, fontSize = 10.sp,
@@ -243,7 +277,7 @@ private fun VerticalMeter(
 
     Canvas(
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Color.White.copy(alpha = 0.04f))
     ) {
         val brush = Brush.verticalGradient(
@@ -272,6 +306,7 @@ private fun VerticalMeter(
                 size = Size(size.width, h)
             )
         }
+        // Peak hold line
         if (peakFrac > 0.001f) {
             val y = size.height * (1f - peakFrac)
             drawLine(Color.White, Offset(0f, y), Offset(size.width, y), strokeWidth = 2.dp.toPx())
@@ -287,36 +322,24 @@ private fun ChannelColumn(
     modifier: Modifier,
     isSub: Boolean = false
 ) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.03f))
+            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         VerticalMeter(level, peak, Modifier.fillMaxWidth().weight(1f), isSub = isSub)
         Spacer(Modifier.height(8.dp))
-        Text(name, color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        Text(name, color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         Text(
-            fmtDb(level), color = dbColor(level),
-            fontSize = 10.sp, fontFamily = FontFamily.Monospace
-        )
-    }
-}
-
-@Composable
-private fun Readout(
-    label: String,
-    value: Float,
-    size: androidx.compose.ui.unit.TextUnit = 20.sp
-) {
-    Row(verticalAlignment = Alignment.Bottom) {
-        Text(
-            label, color = TextMuted, fontSize = 9.sp,
+            fmtDb(level),
+            color = if (isSub) AccentAmber else dbColor(level),
+            fontSize = 12.sp,
             fontFamily = FontFamily.Monospace,
-            letterSpacing = 0.8.sp,
-            modifier = Modifier.width(24.dp)
+            fontWeight = FontWeight.SemiBold
         )
-        Text(
-            fmtDb(value), color = dbColor(value), fontSize = size,
-            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace
-        )
-        Spacer(Modifier.width(4.dp))
-        Text("dB", color = TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
     }
 }
 

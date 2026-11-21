@@ -62,7 +62,7 @@ fun EqScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxSize()) {
         // Toolbar
         Row(
-            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -98,14 +98,14 @@ fun EqScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 "Mode ${state.modeName()}: band 0–2 dikunci (crossover)",
                 style = MaterialTheme.typography.labelSmall,
                 color = WarnAmber,
-                modifier = Modifier.padding(horizontal = 12.dp)
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
         }
 
         // —— Frequency response curve (hero) ——
         GlassCard(
             modifier = Modifier
-                .padding(horizontal = 12.dp)
+                .padding(horizontal = 16.dp)
                 .height(160.dp),
             contentPadding = 0.dp
         ) {
@@ -130,7 +130,7 @@ fun EqScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         Row(
             Modifier
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             val shapes = listOf(

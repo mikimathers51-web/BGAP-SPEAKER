@@ -65,7 +65,7 @@ fun PresetScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     var importText by remember { mutableStateOf("") }
 
     LazyColumn(
-        modifier.fillMaxSize().padding(horizontal = 12.dp),
+        modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         item(key = "save") {

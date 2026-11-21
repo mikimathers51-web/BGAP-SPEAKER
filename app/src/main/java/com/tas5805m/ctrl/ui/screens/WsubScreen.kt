@@ -92,7 +92,7 @@ fun WsubScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val gap = state.wsubGap
 
     LazyColumn(
-        modifier = modifier.fillMaxSize().padding(12.dp),
+        modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item(key = "header") {
@@ -240,7 +240,7 @@ private fun HeaderCard(state: AmpState) {
 @Composable
 private fun FillChartCard(fillMs: Int, targetMs: Int, samples: List<FillSample>) {
     GlassCard(contentPadding = 0.dp) {
-        Column(Modifier.padding(12.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Buffer Fill (real-time)", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.weight(1f))
@@ -312,7 +312,7 @@ private fun FillRing(fillMs: Int, targetMs: Int, modifier: Modifier = Modifier) 
 @Composable
 private fun UndGapCard(und: Int, gap: Int, undHistory: List<Int>, gapHistory: List<Int>) {
     GlassCard(contentPadding = 0.dp) {
-        Column(Modifier.padding(12.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Text("Underrun & Gap", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -370,7 +370,7 @@ private fun ActionRow(
 @Composable
 private fun FoundCard(found: String, paired: List<String>, onPair: (String) -> Unit) {
     GlassCard(contentPadding = 0.dp) {
-        Column(Modifier.padding(12.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Text("Ditemukan saat scan", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
             found.split(",").filter { it.isNotBlank() && it != "none" }.forEach { mac ->
@@ -432,7 +432,7 @@ private fun ExtraCard(extra: Int?, latBase: Int?, latCmd: Int?, onExtra: (Int) -
 @Composable
 private fun TrimCard(current: Int, onTrim: (Int) -> Unit) {
     GlassCard(contentPadding = 0.dp) {
-        Column(Modifier.padding(12.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Trim Latency (ms relatif 70 ms)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 Text("${if (current > 0) "+" else ""}$current ms", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -477,7 +477,7 @@ private fun voiceBandHz(pkHz: Int): Int = if (pkHz < 100) 80 else 125
 @Composable
 private fun VoiceCard(v: VoiceParams, warn: String?, free: Boolean, onChange: (VoiceParams) -> Unit) {
     GlassCard(contentPadding = 0.dp) {
-        Column(Modifier.padding(12.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Voicing Sub (bass)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 Switch(checked = v.on, onCheckedChange = { onChange(v.copy(on = it)) })
@@ -557,7 +557,7 @@ private fun VoiceSlider(label: String, valueText: String, value: Int, range: Int
 @Composable
 private fun RadioCard(state: AmpState) {
     GlassCard(contentPadding = 0.dp) {
-        Column(Modifier.padding(12.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Text("Radio Counters (per slave)", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
             if (state.peerDetails.isEmpty()) {
@@ -722,7 +722,7 @@ private fun PeerCardDetailed(
     val linkColor = if (peer.link) OkGreen else BadRed
     val fill = if (peer.fillMs > 0) peer.fillMs else globalFill
     GlassCard(contentPadding = 0.dp) {
-        Column(Modifier.padding(12.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(10.dp).clip(CircleShape).background(linkColor))
                 Spacer(Modifier.width(8.dp))

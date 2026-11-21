@@ -63,7 +63,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.tas5805m.ctrl.ui.components.GlassCard
 import com.tas5805m.ctrl.ui.components.CardTitle
+import com.tas5805m.ctrl.ui.components.GlassBadge
+import com.tas5805m.ctrl.ui.components.MetricCell
 import androidx.compose.foundation.layout.RowScope
+import com.tas5805m.ctrl.ui.theme.AccentCyan
 import com.tas5805m.ctrl.ui.theme.BadRed
 import com.tas5805m.ctrl.ui.theme.OkGreen
 import com.tas5805m.ctrl.ui.theme.WarnAmber
@@ -79,6 +82,9 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.foundation.layout.aspectRatio
 
 private val ColErr = BadRed
 private val ColWarn = WarnAmber
@@ -176,7 +182,7 @@ fun DiagScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 
     if (!state.connected) {
         LazyColumn(
-            modifier = modifier.fillMaxSize().padding(horizontal = 12.dp),
+            modifier = modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item(key = "offline") {
@@ -208,13 +214,32 @@ fun DiagScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     var cmd by remember { mutableStateOf("") }
 
     LazyColumn(
-        modifier = modifier.fillMaxSize().padding(horizontal = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = modifier.fillMaxSize().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        // Metrics row — sama seperti HTML (Uptime / PVDD / Dropped / Latency)
+        item(key = "metrics") {
+            val peers = state.peerDetails
+            val avgLat = peers.mapNotNull { p -> p.fillMs.takeIf { it > 0 } }.let { if (it.isEmpty()) state.wsubLat else it.average().toInt() }
+            val dropped = peers.sumOf { it.und + it.gap }.coerceAtLeast(state.wsubUnd + state.wsubGap)
+            val uptimeStr = state.peerDetails.firstOrNull { it.upSec >= 0 }?.let { sec ->
+                val h = sec / 3600; val m = (sec % 3600) / 60; val s = sec % 60
+                "%02d:%02d:%02d".format(h, m, s)
+            } ?: "—"
+            val pvdd = state.tags["PVDD"]?.get("v") ?: state.tags["INFO"]?.get("pvdd") ?: "—"
+            Spacer(Modifier.height(4.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetricCell("Uptime", uptimeStr, Modifier.weight(1f), AccentCyan)
+                MetricCell("PVDD", if (pvdd == "—") "—" else "$pvdd V", Modifier.weight(1f), ColOk)
+                MetricCell("Dropped", "$dropped", Modifier.weight(1f), if (dropped > 0) ColWarn else ColOk)
+                MetricCell("Latency AVG", "${avgLat} ms", Modifier.weight(1f), AccentCyan)
+            }
+        }
+
         item(key = "summary") {
             val peers = state.peerDetails
             val faultOn = state.faults.values.any { it == 1 } || (state.tags["FAULT2"]?.values?.any { it == "1" } == true)
-            GlassCard(Modifier.padding(top = 8.dp)) {
+            GlassCard {
                 CardTitle("Status ringkas")
                 Row(Modifier.fillMaxWidth()) {
                     InfoCell("Amp", state.ampstate.uppercase(), if (state.ampstate == "mute") ColWarn else ColOk)
@@ -354,45 +379,140 @@ private fun FindingCard(f: Finding) {
 @Composable
 private fun FaultCard(s: AmpState) {
     val kv2 = s.tags["FAULT2"]
-    GlassCard(contentPadding = 0.dp) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            CardTitle("Fault amp (TAS5805M)")
-            for (chip in 1..2) {
-                if (chip == 2 && kv2 == null) continue
-                Text("Chip $chip", style = MaterialTheme.typography.labelMedium)
-                FAULT_KEYS.chunked(4).forEach { rowKeys ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (k in rowKeys) {
-                            val active = if (chip == 1) (s.faults[k] ?: 0) == 1 else kv2?.get(k) == "1"
-                            FaultCell(Diagnosis.faultLabel(k), active, Modifier.weight(1f))
-                        }
-                        // isi sisa kolom agar lebar sel seragam
-                        repeat(4 - rowKeys.size) { Spacer(Modifier.weight(1f)) }
-                    }
-                }
+    // Ringkasan 4 sel utama (HTML fault-grid): OCP, DC, PVDD, OTP
+    val ocpOn = (s.faults["oc_l"] ?: 0) == 1 || (s.faults["oc_r"] ?: 0) == 1
+    val dcOn  = (s.faults["dc_l"] ?: 0) == 1 || (s.faults["dc_r"] ?: 0) == 1
+    val uvOn  = (s.faults["uv"] ?: 0) == 1
+    val ovOn  = (s.faults["ov"] ?: 0) == 1
+    val otOn  = (s.faults["ot_sd"] ?: 0) == 1 || (s.faults["ot_w"] ?: 0) == 1
+    val otWarn = (s.faults["ot_w"] ?: 0) == 1 && (s.faults["ot_sd"] ?: 0) == 0
+    val anyFault = ocpOn || dcOn || uvOn || ovOn || otOn
+    val pvddDetail = s.tags["PVDD"]?.get("v")?.let { "$it V" }
+        ?: s.tags["INFO"]?.get("pvdd")?.let { "$it V" } ?: "—"
+    val tempDetail = s.tags["TEMP"]?.get("c")?.let { "$it°C" }
+        ?: s.tags["INFO"]?.get("temp")?.let { "$it°C" } ?: "—"
+
+    GlassCard {
+        CardTitle(
+            "Fault Status",
+            trailing = {
+                GlassBadge(
+                    if (anyFault) "FAULT" else "ALL OK",
+                    color = if (anyFault) ColErr else ColOk
+                )
             }
-            val fmt = SimpleDateFormat("HH:mm:ss", Locale.US)
-            if (s.faultHistory.isEmpty()) {
-                Text("Riwayat sesi ini: bersih", style = MaterialTheme.typography.bodySmall, color = ColOk)
-            } else {
-                Text("Riwayat sesi ini:", style = MaterialTheme.typography.labelMedium)
-                s.faultHistory.takeLast(8).reversed().forEach { e ->
-                    Text(
-                        "${fmt.format(Date(e.timeMs))}  chip${e.chip}  ${e.flags.joinToString(",") { Diagnosis.faultLabel(it) }}",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                    )
+        )
+        // 2×2 grid ala HTML
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FaultStatusCell("OCP", ocpOn, if (ocpOn) "FAULT" else "OK", "—", Modifier.weight(1f))
+                FaultStatusCell("DC", dcOn, if (dcOn) "FAULT" else "OK", "—", Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FaultStatusCell(
+                    "PVDD",
+                    uvOn || ovOn,
+                    when {
+                        uvOn -> "UV"
+                        ovOn -> "OV"
+                        else -> "OK"
+                    },
+                    pvddDetail,
+                    Modifier.weight(1f)
+                )
+                FaultStatusCell(
+                    "OTP",
+                    otOn,
+                    when {
+                        (s.faults["ot_sd"] ?: 0) == 1 -> "SHUTDOWN"
+                        otWarn -> "WARM"
+                        else -> "OK"
+                    },
+                    tempDetail,
+                    Modifier.weight(1f),
+                    warnOnly = otWarn
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Text("Detail chip", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
+        for (chip in 1..2) {
+            if (chip == 2 && kv2 == null) continue
+            Text("Chip $chip", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+            FAULT_KEYS.chunked(4).forEach { rowKeys ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (k in rowKeys) {
+                        val active = if (chip == 1) (s.faults[k] ?: 0) == 1 else kv2?.get(k) == "1"
+                        FaultCell(Diagnosis.faultLabel(k), active, Modifier.weight(1f))
+                    }
+                    repeat(4 - rowKeys.size) { Spacer(Modifier.weight(1f)) }
                 }
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+        val fmt = SimpleDateFormat("HH:mm:ss", Locale.US)
+        if (s.faultHistory.isEmpty()) {
+            Text("Riwayat sesi ini: bersih", style = MaterialTheme.typography.bodySmall, color = ColOk)
+        } else {
+            Text("Riwayat sesi ini:", style = MaterialTheme.typography.labelMedium)
+            s.faultHistory.takeLast(8).reversed().forEach { e ->
+                Text(
+                    "${fmt.format(Date(e.timeMs))}  chip${e.chip}  ${e.flags.joinToString(",") { Diagnosis.faultLabel(it) }}",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                )
             }
         }
     }
 }
 
-/** Sel fault ala preview: ikon centang/peringatan + nama + status OK/FAULT. */
+/** Sel besar 2×2 (HTML .fault-cell) — nama + status + detail. */
+@Composable
+private fun FaultStatusCell(
+    name: String,
+    active: Boolean,
+    status: String,
+    detail: String,
+    modifier: Modifier = Modifier,
+    warnOnly: Boolean = false,
+) {
+    val c = when {
+        active && !warnOnly -> ColErr
+        warnOnly -> ColWarn
+        else -> ColOk
+    }
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        modifier
+            .clip(shape)
+            .background(c.copy(alpha = 0.08f), shape)
+            .border(1.dp, c.copy(alpha = 0.30f), shape)
+            .padding(vertical = 14.dp, horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            if (active || warnOnly) Icons.Default.Warning else Icons.Default.CheckCircle,
+            contentDescription = null,
+            tint = c,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(name, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+        Text(status, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c, fontFamily = FontFamily.Monospace)
+        if (detail != "—") {
+            Text(detail, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace)
+        }
+    }
+}
+
+/** Sel fault detail kecil. */
 @Composable
 private fun FaultCell(name: String, active: Boolean, modifier: Modifier = Modifier) {
     val c = if (active) ColErr else ColOk
-    val shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(10.dp)
     Column(
         modifier
             .clip(shape)

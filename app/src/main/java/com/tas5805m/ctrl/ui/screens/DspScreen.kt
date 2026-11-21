@@ -51,7 +51,7 @@ fun DspScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     }
 
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         MixerCard(state, spp)
