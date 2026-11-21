@@ -1,5 +1,24 @@
 # Changelog
 
+
+## 3.13.0
+- **Wireless:** kartu *Penyelarasan latensi* (firmware ≥ 2.9.21, CAPS `wsub_tune`): slider 0–200 ms (`wsub_extra`) untuk membatasi seberapa jauh sub boleh menunda diri; menampilkan latensi dasar dan yang diperintahkan ke sub (`latb`/`latc` dari `WSUBT`).
+- **Diagnosa:** kartu *Status ringkas* di paling atas (Amp, Fault, Mode, Firmware, SPP, peer wireless) — hanya data yang benar-benar dilaporkan firmware (tanpa suhu/PVDD/uptime). Judul kartu Diagnosa dan OTA diseragamkan dengan `CardTitle`.
+- **EQ:** kurva respons diberi isian gradien di bawah garis (gaya preview).
+- Semua layar (Koneksi, Home, EQ, DSP/Preset, Wireless, Monitor, Diagnosa + kartu OTA) memakai `GlassCard`; layar **Koneksi** ditulis ulang (kartu perangkat terhubung, daftar ter-pair dengan tombol Sambung, switch Auto-reconnect/Warna dinamis).
+- `hasVoice` kini juga mengenali token `voice_basic` dari `CAPS` firmware (tidak lagi bergantung pada kedatangan baris `WSUBV`).
+- Pesan galat OTA untuk `ota_nvs` dan `ota_args`.
+- Layar **Wireless** dan kurva **EQ** memakai `GlassCard` yang sama dengan Home; warna status (merah/kuning/hijau) di Wireless dan EQ kini dari tema (`BadRed`/`WarnAmber`/`OkGreen`). Perilaku tidak berubah.
+- **Home** ditulis ulang bergaya Glass (komponen baru `GlassCard`/`CardTitle`/`GlassBadge`/`SwitchRow`): master angka besar, Channel Mix (sub dengan tombol fase 0°/180°, sat, ctr), crossover satu slider LPF sub ⇄ HPF sat (snap 10 Hz), gain analog, Mode, switch **Mute** + amp state + auto-standby, level meter. Hanya kontrol yang ada di firmware 2.9.20; Loudness/Night/sumber input/PVDD/suhu sengaja tidak ditampilkan.
+- Tampilan baru "Glass" (panel hampir hitam, kartu kaca, cyan #7DD3FC + amber #FBBF24), tema Sistem/Gelap/Terang + warna dinamis, top bar logo + status mono berdenyut, snackbar galat.
+- Sambung otomatis ke perangkat terakhir saat app dibuka; sambung ulang 5× (jeda 3 dtk) saat koneksi putus. Antrean poll dibatasi/di-dedupe.
+- Tab **Monitor** baru: meter L/R, chip 2, level sub wireless (PEAK/AVG, peak-hold, puncak sesi, Reset Peaks) dan sparkline buffer 30 dtk per sub.
+- Polling `lvl`/`status`/`wlvl` kini hanya berjalan saat app terlihat (`PollWhileStarted`), tidak lagi di latar belakang.
+- Preset `voice` dipaksa `harm=0 limit=100` (firmware menolak nilai lain).
+- 12 preset bawaan baru (EQ, voicing sub, scene).
+- Bandwidth loop class-D dibatasi sesuai datasheet per modulasi dan frekuensi switching (`ModRules`).
+- Kartu **Update Firmware (OTA)** di tab Diagnosa: kirim `firmware.bin` lewat Bluetooth (butuh firmware dengan OTA + tabel partisi 2 slot).
+
 ## 3.12.1
 
 - **Slider fb (Voicing Sub)**: rentang kini 30–150 Hz, sama dengan peaking/firmware (sebelumnya 30–100 Hz sehingga thumb tertahan di 100 saat label menampilkan nilai lebih besar).
