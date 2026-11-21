@@ -22,18 +22,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tas5805m.ctrl.data.AppViewModel
 import com.tas5805m.ctrl.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlin.math.sin
 
 /**
- * Screen Monitor dengan level meter real-time.
- * Bisa dipanggil tanpa argumen: MonitorScreen()
- * Kalau MainActivity-mu memanggil MonitorScreen(navController, ...), 
- * hapus parameter tersebut atau tambahkan default null di signature.
+ * Monitor screen dengan level meter real-time (PEAK / RMS).
+ * Signature sesuai MainActivity: MonitorScreen(vm, Modifier.padding(padding))
+ *
+ * `vm` diterima untuk kompatibilitas & future hook (mis. baca level dari
+ * TAS5805M register via I²C). Untuk sekarang meter disimulasikan lokal.
  */
 @Composable
-fun MonitorScreen() {
+fun MonitorScreen(
+    vm: AppViewModel,
+    modifier: Modifier = Modifier
+) {
     val scroll = rememberScrollState()
 
     var masterL by remember { mutableStateOf(-60f) }
@@ -53,7 +58,7 @@ fun MonitorScreen() {
         val start = System.currentTimeMillis()
         while (true) {
             val t = (System.currentTimeMillis() - start) / 1000f
-            val subT = signal(t, -18f, 0f, 1.7f) + sin(t * 0.4f) * 3f
+            val subT  = signal(t, -18f, 0f, 1.7f) + sin(t * 0.4f) * 3f
             val satLT = signal(t, -22f, 1.1f, 2.1f)
             val satRT = signal(t, -22f, 2.3f, 1.9f)
             val mLT = maxOf(subT, satLT) + 1.5f
@@ -80,7 +85,7 @@ fun MonitorScreen() {
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .verticalScroll(scroll)
             .padding(16.dp),
@@ -105,7 +110,6 @@ fun MonitorScreen() {
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (active) AccentCyan.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.05f))
                         .padding(vertical = 8.dp)
-                        .then(Modifier)
                 )
             }
         }
@@ -117,7 +121,11 @@ fun MonitorScreen() {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("MASTER OUTPUT", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
+                Text(
+                    "MASTER OUTPUT",
+                    color = TextMuted, fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp
+                )
                 val clip = masterL > -1f || masterR > -1f
                 Text(
                     "CLIP",
@@ -163,7 +171,11 @@ fun MonitorScreen() {
 
         // Channels
         GlassPanel {
-            Text("CHANNELS", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
+            Text(
+                "CHANNELS",
+                color = TextMuted, fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp
+            )
             Spacer(Modifier.height(12.dp))
             Row(
                 modifier = Modifier.fillMaxWidth().height(160.dp),
@@ -197,20 +209,31 @@ private fun GlassPanel(content: @Composable ColumnScope.() -> Unit) {
 private fun MeterPair(leftLevel: Float, rightLevel: Float, leftPeak: Float, rightPeak: Float) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            VerticalMeter(leftLevel, leftPeak, Modifier.width(26.dp).weight(1f, fill = true).height(150.dp))
+            VerticalMeter(leftLevel, leftPeak, Modifier.width(26.dp).height(150.dp))
             Spacer(Modifier.height(6.dp))
-            Text("L", color = TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+            Text(
+                "L", color = TextMuted, fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold
+            )
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            VerticalMeter(rightLevel, rightPeak, Modifier.width(26.dp).weight(1f, fill = true).height(150.dp))
+            VerticalMeter(rightLevel, rightPeak, Modifier.width(26.dp).height(150.dp))
             Spacer(Modifier.height(6.dp))
-            Text("R", color = TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+            Text(
+                "R", color = TextMuted, fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }
 
 @Composable
-private fun VerticalMeter(level: Float, peak: Float, modifier: Modifier, isSub: Boolean = false) {
+private fun VerticalMeter(
+    level: Float,
+    peak: Float,
+    modifier: Modifier,
+    isSub: Boolean = false
+) {
     val animated by animateFloatAsState(
         targetValue = ((level.coerceIn(-60f, 0f) + 60f) / 60f),
         animationSpec = spring(dampingRatio = 0.8f, stiffness = 800f),
@@ -218,28 +241,36 @@ private fun VerticalMeter(level: Float, peak: Float, modifier: Modifier, isSub: 
     )
     val peakFrac = ((peak.coerceIn(-60f, 0f) + 60f) / 60f)
 
-    Canvas(modifier = modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.04f))) {
+    Canvas(
+        modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color.White.copy(alpha = 0.04f))
+    ) {
         val brush = Brush.verticalGradient(
             colorStops = if (isSub) arrayOf(
-                0f to Color(0xFFCA8A04),
+                0f    to Color(0xFFCA8A04),
                 0.55f to Color(0xFFEAB308),
                 0.72f to Color(0xFFF59E0B),
                 0.86f to Color(0xFFF97316),
-                1f to BadRed
+                1f    to BadRed
             ) else arrayOf(
-                0f to OkGreen,
+                0f    to OkGreen,
                 0.55f to OkGreen,
                 0.66f to Color(0xFF84CC16),
                 0.78f to WarnAmber,
                 0.90f to Color(0xFFF97316),
-                1f to BadRed
+                1f    to BadRed
             ),
             startY = size.height,
             endY = 0f
         )
         val h = size.height * animated
         if (h > 0f) {
-            drawRect(brush = brush, topLeft = Offset(0f, size.height - h), size = Size(size.width, h))
+            drawRect(
+                brush = brush,
+                topLeft = Offset(0f, size.height - h),
+                size = Size(size.width, h)
+            )
         }
         if (peakFrac > 0.001f) {
             val y = size.height * (1f - peakFrac)
@@ -249,22 +280,41 @@ private fun VerticalMeter(level: Float, peak: Float, modifier: Modifier, isSub: 
 }
 
 @Composable
-private fun ChannelColumn(name: String, level: Float, peak: Float, modifier: Modifier, isSub: Boolean = false) {
+private fun ChannelColumn(
+    name: String,
+    level: Float,
+    peak: Float,
+    modifier: Modifier,
+    isSub: Boolean = false
+) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         VerticalMeter(level, peak, Modifier.fillMaxWidth().weight(1f), isSub = isSub)
         Spacer(Modifier.height(8.dp))
         Text(name, color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-        Text(fmtDb(level), color = dbColor(level), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+        Text(
+            fmtDb(level), color = dbColor(level),
+            fontSize = 10.sp, fontFamily = FontFamily.Monospace
+        )
     }
 }
 
 @Composable
-private fun Readout(label: String, value: Float, size: androidx.compose.ui.unit.TextUnit = 20.sp) {
+private fun Readout(
+    label: String,
+    value: Float,
+    size: androidx.compose.ui.unit.TextUnit = 20.sp
+) {
     Row(verticalAlignment = Alignment.Bottom) {
-        Text(label, color = TextMuted, fontSize = 9.sp, fontFamily = FontFamily.Monospace,
-            letterSpacing = 0.8.sp, modifier = Modifier.width(24.dp))
-        Text(fmtDb(value), color = dbColor(value), fontSize = size,
-            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+        Text(
+            label, color = TextMuted, fontSize = 9.sp,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 0.8.sp,
+            modifier = Modifier.width(24.dp)
+        )
+        Text(
+            fmtDb(value), color = dbColor(value), fontSize = size,
+            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace
+        )
         Spacer(Modifier.width(4.dp))
         Text("dB", color = TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
     }
@@ -290,12 +340,12 @@ private fun updatePeak(peak: Float, level: Float): Float =
 
 private fun fmtDb(db: Float): String = when {
     db <= -59.5f -> "−∞"
-    db > -0.5f -> "0.0"
-    else -> "%.1f".format(db)
+    db > -0.5f   -> "0.0"
+    else         -> "%.1f".format(db)
 }
 
 private fun dbColor(db: Float): Color = when {
     db > -1f -> BadRed
     db > -6f -> WarnAmber
-    else -> AccentCyan
+    else     -> AccentCyan
 }
