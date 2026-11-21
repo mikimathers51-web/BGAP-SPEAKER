@@ -1,7 +1,8 @@
-package com.bgap.speaker.ui.components
+package com.tas5805m.ctrl.ui.components
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -16,7 +17,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.bgap.speaker.ui.theme.BgapColors
+import com.tas5805m.ctrl.ui.theme.BgapColors
 
 private const val MIN_DB = -60f
 private const val MAX_DB = 0f
