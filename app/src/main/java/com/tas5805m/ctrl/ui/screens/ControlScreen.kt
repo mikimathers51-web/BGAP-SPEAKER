@@ -1,43 +1,64 @@
 package com.tas5805m.ctrl.ui.screens
 
-import com.tas5805m.ctrl.ui.components.PollWhileStarted
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tas5805m.ctrl.data.AppViewModel
+import com.tas5805m.ctrl.ui.components.CardTitle
+import com.tas5805m.ctrl.ui.components.GlassBadge
+import com.tas5805m.ctrl.ui.components.GlassCard
+import com.tas5805m.ctrl.ui.components.GlassGap
+import com.tas5805m.ctrl.ui.components.PollWhileStarted
 import com.tas5805m.ctrl.ui.components.SendSlider
 import com.tas5805m.ctrl.ui.components.SendSliderInt
+import com.tas5805m.ctrl.ui.components.SwitchRow
+import com.tas5805m.ctrl.ui.theme.BadRed
+import com.tas5805m.ctrl.ui.theme.OkGreen
+import com.tas5805m.ctrl.ui.theme.WarnAmber
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
-import kotlin.math.cos
-import kotlin.math.sin
 
 /**
- * Home / Kontrol — gaya Axton-like:
- * status Connect, master volume besar, mode chips, xover, level meter mini.
+ * Home / Kontrol — gaya Glass (sama dengan prototipe), hanya berisi kontrol yang benar-benar ada di firmware:
+ * master, mix kanal (sat/sub/ctr), polaritas sub, crossover, gain analog, mode, mute/amp state, auto-standby, level.
+ * (Loudness, Night Mode, sumber input, Sat L/R terpisah, PVDD/suhu TIDAK ada di firmware → sengaja tidak ditampilkan.)
  */
 @Composable
 fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
@@ -47,9 +68,9 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     if (!state.connected) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.BluetoothDisabled, null, Modifier.size(48.dp), tint = Color.Gray)
+                Icon(Icons.Default.BluetoothDisabled, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.outline)
                 Spacer(Modifier.height(12.dp))
-                Text("Hubungkan perangkat di tab Koneksi", color = Color.Gray)
+                Text("Hubungkan perangkat di tab Koneksi", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         return
@@ -70,200 +91,156 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        // —— Connect status bar (Axton-style) ——
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = if (state.connected) Color(0xFF0D3D2E) else Color(0xFF3D1A1A)
-            ),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Row(
-                Modifier.fillMaxWidth().padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    Modifier
-                        .size(12.dp)
-                        .clip(CircleShape)
-                        .background(if (state.connected) Color(0xFF69F0AE) else Color(0xFFEF5350))
-                )
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        if (state.connected) "CONNECTED" else "DISCONNECTED",
-                        fontWeight = FontWeight.Bold,
-                        color = if (state.connected) Color(0xFF69F0AE) else Color(0xFFEF5350),
-                        fontSize = 13.sp
-                    )
-                    Text(
-                        "${state.deviceName} · ${state.modeName()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.7f)
-                    )
-                }
-                Icon(
-                    Icons.Default.BluetoothConnected,
-                    null,
-                    tint = if (state.connected) Color(0xFF69F0AE) else Color.Gray
-                )
-            }
-        }
-
-        // —— Master volume (large) ——
-        Card(shape = RoundedCornerShape(16.dp)) {
-            Column(
-                Modifier.fillMaxWidth().padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("MASTER", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.height(8.dp))
-                // Circular-ish gauge via Canvas arc
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(140.dp)) {
-                    MasterArc(value = state.master / 100f)
-                    Text(
-                        "${state.master}",
-                        fontSize = 36.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                SendSliderInt(
-                    value = state.master,
-                    onSend = { spp.setMaster(it) },
-                    valueRange = 0..100,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        // —— Sat / Sub / Center row ——
-        // Mode 0: firmware hanya memakai MASTER (satvol/subvol diabaikan). CTR hanya bermakna di mode 3.
-        if (state.mode != 0) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MiniVolCard("SAT", state.sat, Modifier.weight(1f)) { spp.setSat(it) }
-                MiniVolCard("SUB", state.sub, Modifier.weight(1f)) { spp.setSub(it) }
-                if (state.is31) {
-                    MiniVolCard("CTR", state.ctr, Modifier.weight(1f)) { spp.setCtr(it) }
-                }
-            }
-        }
-
-        // —— Polaritas sub + auto-standby ——
-        if ((state.hasSubInv && state.hasSubPath) || state.hasStandby) {
-            Card(shape = RoundedCornerShape(12.dp)) {
-                Column(Modifier.padding(12.dp)) {
-                    if (state.hasSubInv && state.hasSubPath) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("POLARITAS SUB", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                                Text(
-                                    if (state.subInv) "Dibalik (180°)" else "Normal",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                            Switch(checked = state.subInv, onCheckedChange = { spp.setSubInv(it) })
-                        }
-                    }
-                    if (state.hasStandby) {
-                        if (state.hasSubInv && state.hasSubPath) Spacer(Modifier.height(10.dp))
-                        Text(
-                            "AUTO-STANDBY  " + (if (state.standbyMin == 0) "OFF" else "${state.standbyMin} menit") +
-                                (if (state.inStandby) "  ·  SEDANG STANDBY" else ""),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        SendSliderInt(
-                            value = state.standbyMin,
-                            onSend = { spp.setStandby((it / 5) * 5) },
-                            valueRange = 0..120,
-                            steps = 23,
-                            live = false,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-        }
-
-        // —— Mode ——
-        Card(shape = RoundedCornerShape(12.dp)) {
-            Column(Modifier.padding(12.dp)) {
-                Text("MODE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Hanya mode yang benar-benar diterima firmware (CAPS): master nirkabel terkunci mode 4,
-                    // mode 1/3 butuh chip kedua, mode 4 hanya di env wireless.
-                    listOf(0 to "Stereo", 1 to "2.1 D", 2 to "2.1 S", 3 to "3.1", 4 to "W.Sub")
-                        .filter { (m, _) -> state.modeAllowed(m) || state.mode == m }
-                        .forEach { (m, label) ->
-                            FilterChip(
-                                selected = state.mode == m,
-                                enabled = state.modeAllowed(m),
-                                onClick = { if (state.mode != m) spp.setMode(m) },
-                                label = { Text(label, fontSize = 11.sp) }
-                            )
-                        }
-                }
-            }
-        }
-
-        // —— Xover + Gain ——
-        Card(shape = RoundedCornerShape(12.dp)) {
-            Column(Modifier.padding(12.dp)) {
-                Text("CROSSOVER  ${state.xover} Hz", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                // live = false: tiap `xover` menyetel ulang filter DSP (I2C) + status panjang → kirim hanya saat dilepas
-                SendSlider(
-                    value = state.xover.toFloat(),
-                    onSend = { spp.setXover(((it / 10f).roundToInt() * 10).coerceIn(60, 150)) },
-                    valueRange = 60f..150f,
-                    steps = 8,
-                    live = false
-                )
+        // —— Master volume: angka besar + slider ——
+        GlassCard {
+            CardTitle("Master Volume", trailing = { GlassBadge(state.modeName()) })
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.Bottom) {
                 Text(
-                    "GAIN  ${state.gain}  (${"%.1f".format(-state.gain * 0.5)} dB)",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    buildAnnotatedString {
+                        append("${state.master}")
+                        withStyle(SpanStyle(fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)) { append("%") }
+                    },
+                    fontSize = 56.sp,
+                    fontWeight = FontWeight.Light,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.primary,
                 )
+            }
+            GlassGap(8)
+            SendSliderInt(
+                value = state.master,
+                onSend = { spp.setMaster(it) },
+                valueRange = 0..100,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        // —— Channel mix: sat / sub / ctr + polaritas sub. Mode 0: firmware hanya memakai MASTER. ——
+        if (state.mode != 0) {
+            GlassCard {
+                CardTitle("Channel Mix")
+                ChannelRow("Subwoofer", state.sub, trailing = {
+                    if (state.hasSubInv && state.hasSubPath) {
+                        OutlinedButton(
+                            onClick = { spp.setSubInv(!state.subInv) },
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = if (state.subInv) 0.8f else 0.3f)),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            modifier = Modifier.height(28.dp),
+                        ) { Text(if (state.subInv) "180°" else "0°", fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
+                    }
+                }) { spp.setSub(it) }
+                GlassGap()
+                ChannelRow("Satellite", state.sat) { spp.setSat(it) }
+                if (state.is31) {
+                    GlassGap()
+                    ChannelRow("Center", state.ctr) { spp.setCtr(it) }
+                }
+            }
+        }
+
+        // —— Crossover: satu nilai untuk LPF sub + HPF sat; firmware membulatkan per 10 Hz (tabel, bukan LR4 terhitung) ——
+        GlassCard {
+            CardTitle("Crossover", trailing = { GlassBadge("60–150 Hz · 10 Hz") })
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("LPF SUB  ⇄  HPF SAT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${state.xover} Hz", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            }
+            // live = false: tiap `xover` menyetel ulang filter DSP (I2C) + status panjang → kirim hanya saat dilepas
+            SendSlider(
+                value = state.xover.toFloat(),
+                onSend = { spp.setXover(((it / 10f).roundToInt() * 10).coerceIn(60, 150)) },
+                valueRange = 60f..150f,
+                steps = 8,
+                live = false,
+            )
+        }
+
+        // —— Gain analog (0..31, −0,5 dB per langkah) ——
+        GlassCard {
+            CardTitle("Analog Gain", trailing = { GlassBadge("${"%.1f".format(-state.gain * 0.5)} dB") })
+            SendSliderInt(
+                value = state.gain,
+                onSend = { spp.setGain(it) },
+                valueRange = 0..31,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        // —— Mode (hanya yang diterima firmware menurut CAPS) ——
+        GlassCard {
+            CardTitle("Mode")
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(0 to "Stereo", 1 to "2.1 D", 2 to "2.1 S", 3 to "3.1", 4 to "W.Sub")
+                    .filter { (m, _) -> state.modeAllowed(m) || state.mode == m }
+                    .forEach { (m, label) ->
+                        FilterChip(
+                            selected = state.mode == m,
+                            enabled = state.modeAllowed(m),
+                            onClick = { if (state.mode != m) spp.setMode(m) },
+                            label = { Text(label, fontSize = 11.sp) },
+                        )
+                    }
+            }
+        }
+
+        // —— Mute + amp state + auto-standby ——
+        GlassCard {
+            CardTitle("Amplifier", trailing = {
+                if (state.inStandby) GlassBadge("STANDBY", color = WarnAmber)
+            })
+            SwitchRow(
+                title = "Mute",
+                sub = "Bisukan output (amp state: mute)",
+                checked = state.ampstate == "mute",
+                onChange = { spp.setAmp(if (it) "mute" else "play") },
+            )
+            GlassGap(8)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("play", "hiz", "sleep").forEach { s ->
+                    FilterChip(
+                        selected = state.ampstate == s,
+                        onClick = { spp.setAmp(s) },
+                        label = { Text(s.uppercase(), fontSize = 11.sp) },
+                    )
+                }
+            }
+            if (state.hasStandby) {
+                GlassGap(12)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Auto-standby", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    Text(
+                        if (state.standbyMin == 0) "OFF" else "${state.standbyMin} menit",
+                        fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 SendSliderInt(
-                    value = state.gain,
-                    onSend = { spp.setGain(it) },
-                    valueRange = 0..31
+                    value = state.standbyMin,
+                    onSend = { spp.setStandby((it / 5) * 5) },
+                    valueRange = 0..120,
+                    steps = 23,
+                    live = false,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
 
-        // —— Amp state ——
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("play", "mute", "hiz", "sleep").forEach { s ->
-                FilterChip(
-                    selected = state.ampstate == s,
-                    onClick = { spp.setAmp(s) },
-                    label = { Text(s.uppercase(), fontSize = 11.sp) }
-                )
-            }
-        }
-
-        // —— Level meters mini ——
+        // —— Level meter ——
         if (state.hasLvl) {
-            Card(shape = RoundedCornerShape(12.dp)) {
-                Column(Modifier.padding(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("LEVEL", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.weight(1f))
-                        TextButton(onClick = {
-                            spp.requestLvl()
-                            if (state.hasLvl2) spp.requestLvl2()
-                        }) { Text("↻", fontSize = 14.sp) }
-                    }
-                    LevelBar("L", state.lvlL)
-                    LevelBar("R", state.lvlR)
-                    if (state.hasLvl2) {
-                        LevelBar("L2", state.lvl2L)
-                        LevelBar("R2", state.lvl2R)
-                    }
+            GlassCard {
+                CardTitle("Level", trailing = {
+                    TextButton(onClick = {
+                        spp.requestLvl()
+                        if (state.hasLvl2) spp.requestLvl2()
+                    }) { Text("↻", fontSize = 14.sp) }
+                })
+                LevelBar("L", state.lvlL)
+                LevelBar("R", state.lvlR)
+                if (state.hasLvl2) {
+                    LevelBar("L2", state.lvl2L)
+                    LevelBar("R2", state.lvl2R)
                 }
             }
         }
@@ -272,7 +249,7 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             Button(
                 onClick = { spp.save() },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(14.dp),
             ) {
                 Icon(Icons.Default.Save, null)
                 Spacer(Modifier.width(8.dp))
@@ -282,48 +259,28 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     }
 }
 
+/** Satu baris kanal: label + nilai (%) mono + slider; [trailing] untuk tombol kecil (mis. fase). */
 @Composable
-private fun MasterArc(value: Float) {
-    val primary = MaterialTheme.colorScheme.primary
-    Canvas(Modifier.fillMaxSize()) {
-        val stroke = 10.dp.toPx()
-        val pad = stroke / 2
-        // background arc
-        drawArc(
-            color = Color(0xFF2A2A2A),
-            startAngle = 135f,
-            sweepAngle = 270f,
-            useCenter = false,
-            topLeft = Offset(pad, pad),
-            size = Size(size.width - stroke, size.height - stroke),
-            style = Stroke(width = stroke, cap = StrokeCap.Round)
-        )
-        // value arc
-        drawArc(
-            brush = Brush.sweepGradient(listOf(primary.copy(alpha = 0.5f), primary)),
-            startAngle = 135f,
-            sweepAngle = 270f * value.coerceIn(0f, 1f),
-            useCenter = false,
-            topLeft = Offset(pad, pad),
-            size = Size(size.width - stroke, size.height - stroke),
-            style = Stroke(width = stroke, cap = StrokeCap.Round)
-        )
-    }
-}
-
-@Composable
-private fun MiniVolCard(label: String, value: Int, modifier: Modifier = Modifier, onChange: (Int) -> Unit) {
-    Card(modifier = modifier, shape = RoundedCornerShape(12.dp)) {
-        Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            Text("$value", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-            SendSliderInt(
-                value = value,
-                onSend = onChange,
-                valueRange = 0..100,
-                modifier = Modifier.height(28.dp)
-            )
+private fun ChannelRow(
+    label: String,
+    value: Int,
+    trailing: @Composable () -> Unit = {},
+    onChange: (Int) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.width(8.dp))
+            trailing()
+            Spacer(Modifier.weight(1f))
+            Text("$value%", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
         }
+        SendSliderInt(
+            value = value,
+            onSend = onChange,
+            valueRange = 0..100,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -332,9 +289,9 @@ fun LevelBar(label: String, deciDb: Int) {
     val norm = ((deciDb + 1200) / 1200f).coerceIn(0f, 1f)
     val db = deciDb / 10f
     val color = when {
-        norm > 0.9f -> Color(0xFFEF5350)
-        norm > 0.7f -> Color(0xFFFFB74D)
-        else -> Color(0xFF69F0AE)
+        norm > 0.9f -> BadRed
+        norm > 0.7f -> WarnAmber
+        else -> OkGreen
     }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
         Text(label, modifier = Modifier.width(28.dp), style = MaterialTheme.typography.labelSmall)
@@ -342,8 +299,8 @@ fun LevelBar(label: String, deciDb: Int) {
             progress = { norm },
             modifier = Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(4.dp)),
             color = color,
-            trackColor = Color(0xFF2A2A2A)
+            trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
         )
-        Text("${db.roundToInt()}", modifier = Modifier.width(36.dp), style = MaterialTheme.typography.labelSmall)
+        Text("${db.roundToInt()}", modifier = Modifier.width(36.dp), style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace)
     }
 }

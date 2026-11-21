@@ -1,6 +1,12 @@
 package com.tas5805m.ctrl.ui.screens
 
+import com.tas5805m.ctrl.ui.components.CardTitle
+import com.tas5805m.ctrl.ui.components.GlassBadge
+import com.tas5805m.ctrl.ui.components.GlassCard
 import com.tas5805m.ctrl.ui.components.PollWhileStarted
+import com.tas5805m.ctrl.ui.theme.BadRed
+import com.tas5805m.ctrl.ui.theme.OkGreen
+import com.tas5805m.ctrl.ui.theme.WarnAmber
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -129,8 +135,9 @@ fun WsubScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 
         if (state.peerDetails.isEmpty()) {
             item(key = "no_peers") {
-                Card {
+                GlassCard(contentPadding = 0.dp) {
                     ListItem(
+                    colors = com.tas5805m.ctrl.ui.components.glassListItemColors(),
                         headlineContent = { Text("Belum ada peer") },
                         supportingContent = { Text("Tekan Scan Slave lalu Pair MAC yang muncul") }
                     )
@@ -153,6 +160,17 @@ fun WsubScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 
         item(key = "trim") {
             TrimCard(current = state.wsubTrim, onTrim = { spp.wsubTrim(it) })
+        }
+
+        if (state.hasWsubTune) {
+            item(key = "extra") {
+                ExtraCard(
+                    extra = state.wsubExtra,
+                    latBase = state.tagInt("WSUBT", "latb"),
+                    latCmd = state.tagInt("WSUBT", "latc"),
+                    onExtra = { spp.wsubExtra(it) },
+                )
+            }
         }
 
         if (state.hasVoice) {
@@ -182,7 +200,7 @@ fun WsubScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 
 @Composable
 private fun HeaderCard(state: AmpState) {
-    Card {
+    GlassCard(contentPadding = 0.dp) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.SpeakerGroup, null, tint = MaterialTheme.colorScheme.primary)
@@ -202,11 +220,11 @@ private fun HeaderCard(state: AmpState) {
             if (state.wsubFb == 1) {
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Warning, null, tint = Color(0xFFFFB74D), modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Warning, null, tint = WarnAmber, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(
                         "Fallback stereo aktif — sub hilang ≥6 dtk",
-                        color = Color(0xFFFFB74D),
+                        color = WarnAmber,
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -217,7 +235,7 @@ private fun HeaderCard(state: AmpState) {
 
 @Composable
 private fun FillChartCard(fillMs: Int, targetMs: Int, samples: List<FillSample>) {
-    Card {
+    GlassCard(contentPadding = 0.dp) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Buffer Fill (real-time)", style = MaterialTheme.typography.titleSmall)
@@ -261,7 +279,7 @@ private fun FillChartCard(fillMs: Int, targetMs: Int, samples: List<FillSample>)
 
 @Composable
 private fun UndGapCard(und: Int, gap: Int, undHistory: List<Int>, gapHistory: List<Int>) {
-    Card {
+    GlassCard(contentPadding = 0.dp) {
         Column(Modifier.padding(12.dp)) {
             Text("Underrun & Gap", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(8.dp))
@@ -271,7 +289,7 @@ private fun UndGapCard(und: Int, gap: Int, undHistory: List<Int>, gapHistory: Li
                     key(undHistory.lastOrNull(), undHistory.size) {
                         MiniBarHistory(
                             values = undHistory,
-                            color = Color(0xFFEF5350),
+                            color = BadRed,
                             modifier = Modifier.fillMaxWidth().height(48.dp)
                         )
                     }
@@ -281,7 +299,7 @@ private fun UndGapCard(und: Int, gap: Int, undHistory: List<Int>, gapHistory: Li
                     key(gapHistory.lastOrNull(), gapHistory.size) {
                         MiniBarHistory(
                             values = gapHistory,
-                            color = Color(0xFFFFB74D),
+                            color = WarnAmber,
                             modifier = Modifier.fillMaxWidth().height(48.dp)
                         )
                     }
@@ -319,7 +337,7 @@ private fun ActionRow(
 
 @Composable
 private fun FoundCard(found: String, paired: List<String>, onPair: (String) -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f))) {
+    GlassCard(contentPadding = 0.dp) {
         Column(Modifier.padding(12.dp)) {
             Text("Ditemukan saat scan", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
@@ -345,9 +363,43 @@ private fun FoundCard(found: String, paired: List<String>, onPair: (String) -> U
     }
 }
 
+/** Penyelarasan latensi (firmware ≥ 2.9.21): seberapa jauh sub boleh menunda diri di atas dasar `70 ms + trim`. */
+@Composable
+private fun ExtraCard(extra: Int?, latBase: Int?, latCmd: Int?, onExtra: (Int) -> Unit) {
+    val cur = extra ?: 100
+    GlassCard(contentPadding = 0.dp) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            CardTitle("Penyelarasan latensi", Modifier.padding(bottom = 0.dp), trailing = { GlassBadge("maks +$cur ms") })
+            Text(
+                "Batas seberapa jauh sub boleh menunda diri di atas dasar (70 ms + trim) saat radio tersendat. " +
+                    "Kecil = sub tidak makin telat dari satelit, tapi underrun lebih sering. Besar = lebih tahan underrun, sub bisa lebih telat.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (latBase != null && latCmd != null) {
+                Text(
+                    "Dasar $latBase ms → latensi yang diperintahkan ke sub $latCmd ms",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            // Dikirim saat dilepas; kelipatan 5 ms (rentang firmware 0…200).
+            SendSliderInt(
+                value = cur,
+                onSend = { onExtra((it / 5) * 5) },
+                valueRange = 0..200,
+                steps = 39,
+                live = false,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
 @Composable
 private fun TrimCard(current: Int, onTrim: (Int) -> Unit) {
-    Card {
+    GlassCard(contentPadding = 0.dp) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Trim Latency (ms relatif 70 ms)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
@@ -392,7 +444,7 @@ private fun voiceBandHz(pkHz: Int): Int = if (pkHz < 100) 80 else 125
  */
 @Composable
 private fun VoiceCard(v: VoiceParams, warn: String?, free: Boolean, onChange: (VoiceParams) -> Unit) {
-    Card {
+    GlassCard(contentPadding = 0.dp) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Voicing Sub (bass)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
@@ -472,7 +524,7 @@ private fun VoiceSlider(label: String, valueText: String, value: Int, range: Int
 
 @Composable
 private fun RadioCard(state: AmpState) {
-    Card {
+    GlassCard(contentPadding = 0.dp) {
         Column(Modifier.padding(12.dp)) {
             Text("Radio Counters (per slave)", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
@@ -506,10 +558,10 @@ private fun RadioCard(state: AmpState) {
 fun FillGauge(fillMs: Int, targetMs: Int, modifier: Modifier = Modifier) {
     val progress = if (targetMs > 0) (fillMs.toFloat() / (targetMs * 1.5f)).coerceIn(0f, 1f) else 0f
     val color = when {
-        fillMs <= 0 -> Color(0xFFEF5350)
-        fillMs < targetMs * 0.5f -> Color(0xFFFFB74D)
+        fillMs <= 0 -> BadRed
+        fillMs < targetMs * 0.5f -> WarnAmber
         fillMs > targetMs * 1.3f -> Color(0xFF4FC3F7)
-        else -> Color(0xFF69F0AE)
+        else -> OkGreen
     }
     // Cache target fraction
     val targetFrac = remember(targetMs) {
@@ -635,9 +687,9 @@ private fun PeerCardDetailed(
     targetMs: Int,
     onUnpair: () -> Unit
 ) {
-    val linkColor = if (peer.link) Color(0xFF69F0AE) else Color(0xFFEF5350)
+    val linkColor = if (peer.link) OkGreen else BadRed
     val fill = if (peer.fillMs > 0) peer.fillMs else globalFill
-    Card {
+    GlassCard(contentPadding = 0.dp) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(10.dp).clip(CircleShape).background(linkColor))
@@ -683,7 +735,7 @@ private fun PeerCardDetailed(
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "Fault pernah terjadi ×${peer.fcnt} sejak boot slave (saat ini bersih)",
-                    color = Color(0xFFFFB74D),
+                    color = WarnAmber,
                     style = MaterialTheme.typography.bodySmall
                 )
             }

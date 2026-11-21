@@ -17,6 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.tas5805m.ctrl.ui.components.CardTitle
+import com.tas5805m.ctrl.ui.components.GlassCard
+import com.tas5805m.ctrl.ui.theme.OkGreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tas5805m.ctrl.bluetooth.SppClient
 import com.tas5805m.ctrl.data.AmpState
@@ -66,9 +69,9 @@ fun DspScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 
 @Composable
 private fun DspCard(title: String, note: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    GlassCard(contentPadding = 0.dp) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            CardTitle(title, Modifier.padding(bottom = 0.dp))
             if (note != null) {
                 Text(
                     note,
@@ -333,7 +336,7 @@ private fun PersistCard(s: AmpState, spp: SppClient) {
             }
         }
         when (s.saved) {
-            true -> Text("Setelan tersimpan.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF69F0AE))
+            true -> Text("Setelan tersimpan.", style = MaterialTheme.typography.bodySmall, color = OkGreen)
             false -> Text("Simpanan dihapus (default saat boot berikutnya).", style = MaterialTheme.typography.bodySmall)
             null -> {}
         }

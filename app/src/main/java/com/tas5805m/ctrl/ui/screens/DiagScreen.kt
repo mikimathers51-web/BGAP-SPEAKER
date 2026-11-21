@@ -55,6 +55,12 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.tas5805m.ctrl.ui.components.GlassCard
+import com.tas5805m.ctrl.ui.components.CardTitle
+import androidx.compose.foundation.layout.RowScope
+import com.tas5805m.ctrl.ui.theme.BadRed
+import com.tas5805m.ctrl.ui.theme.OkGreen
+import com.tas5805m.ctrl.ui.theme.WarnAmber
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tas5805m.ctrl.data.AmpState
@@ -68,10 +74,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val ColErr = Color(0xFFEF5350)
-private val ColWarn = Color(0xFFFFB74D)
+private val ColErr = BadRed
+private val ColWarn = WarnAmber
 private val ColInfo = Color(0xFF4FC3F7)
-private val ColOk = Color(0xFF69F0AE)
+private val ColOk = OkGreen
 
 private fun levelColor(l: Level): Color = when (l) {
     Level.ERR -> ColErr
@@ -199,10 +205,31 @@ fun DiagScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize().padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        item(key = "summary") {
+            val peers = state.peerDetails
+            val faultOn = state.faults.values.any { it == 1 } || (state.tags["FAULT2"]?.values?.any { it == "1" } == true)
+            GlassCard(Modifier.padding(top = 8.dp)) {
+                CardTitle("Status ringkas")
+                Row(Modifier.fillMaxWidth()) {
+                    InfoCell("Amp", state.ampstate.uppercase(), if (state.ampstate == "mute") ColWarn else ColOk)
+                    InfoCell("Fault", if (faultOn) "Aktif" else "Tidak ada", if (faultOn) ColErr else ColOk)
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    InfoCell("Mode", state.modeName(), MaterialTheme.colorScheme.onSurface)
+                    InfoCell("Firmware", state.fwVersion.ifBlank { "—" }, MaterialTheme.colorScheme.onSurface)
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    InfoCell("SPP", if (state.connected) "Terhubung" else "Putus", if (state.connected) ColOk else ColErr)
+                    InfoCell("Peer wireless", if (peers.isEmpty()) "—" else "${peers.count { it.link }}/${peers.size} link", MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        }
         item(key = "actions") {
-            Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            GlassCard(contentPadding = 0.dp) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Diagnosa", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    CardTitle("Diagnosa")
                     val win = if (state.baselineAtMs > 0) (System.currentTimeMillis() - state.baselineAtMs) / 1000 else -1L
                     Text(
                         if (win >= 0) "Jendela ukur: $win dtk (counter dihitung sejak Reset ukur)" else "Jendela ukur: belum dimulai",
@@ -244,9 +271,9 @@ fun DiagScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         }
 
         item(key = "terminal") {
-            Card(Modifier.fillMaxWidth()) {
+            GlassCard(contentPadding = 0.dp) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Terminal", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    CardTitle("Terminal")
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = cmd,
@@ -295,7 +322,9 @@ private fun FindingCard(f: Finding) {
     val c = levelColor(f.level)
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = c.copy(alpha = 0.12f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, c.copy(alpha = 0.30f)),
     ) {
         Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(levelMark(f.level), color = c, fontWeight = FontWeight.Bold, modifier = Modifier.width(18.dp))
@@ -319,9 +348,9 @@ private fun FindingCard(f: Finding) {
 @Composable
 private fun FaultCard(s: AmpState) {
     val kv2 = s.tags["FAULT2"]
-    Card(Modifier.fillMaxWidth()) {
+    GlassCard(contentPadding = 0.dp) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Fault amp (TAS5805M)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            CardTitle("Fault amp (TAS5805M)")
             for (chip in 1..2) {
                 if (chip == 2 && kv2 == null) continue
                 Text("Chip $chip", style = MaterialTheme.typography.labelMedium)
@@ -358,7 +387,7 @@ private fun FaultCard(s: AmpState) {
 @Composable
 private fun RawCard(title: String, s: AmpState, heads: List<String>) {
     val lines = heads.mapNotNull { s.rawByHead[it] }
-    Card(Modifier.fillMaxWidth()) {
+    GlassCard(contentPadding = 0.dp) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             if (lines.isEmpty()) Text("Belum ada data.", style = MaterialTheme.typography.bodySmall)
@@ -369,9 +398,9 @@ private fun RawCard(title: String, s: AmpState, heads: List<String>) {
 
 @Composable
 private fun WirelessRaw(s: AmpState) {
-    Card(Modifier.fillMaxWidth()) {
+    GlassCard(contentPadding = 0.dp) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Link nirkabel & Bluetooth (mentah)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            CardTitle("Link nirkabel & Bluetooth (mentah)")
             listOf("WSUB", "WSUBT", "WSUBC", "BTD").mapNotNull { s.rawByHead[it] }.forEach {
                 Text(it, fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 14.sp)
             }
@@ -404,7 +433,7 @@ private fun HistoryCard(
     onClear: () -> Unit,
 ) {
     var confirmClear by remember { mutableStateOf(false) }
-    Card(Modifier.fillMaxWidth()) {
+    GlassCard(contentPadding = 0.dp) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -442,5 +471,14 @@ private fun HistoryCard(
                 }
             }
         }
+    }
+}
+
+/** Sel info: label kecil + nilai mono tebal (gaya "Status Ringkas" pada preview). */
+@Composable
+private fun RowScope.InfoCell(label: String, value: String, color: Color) {
+    Column(Modifier.weight(1f)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = color, maxLines = 1)
     }
 }

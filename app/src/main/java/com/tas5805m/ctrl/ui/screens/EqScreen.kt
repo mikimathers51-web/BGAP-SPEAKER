@@ -14,12 +14,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.tas5805m.ctrl.ui.components.GlassCard
+import com.tas5805m.ctrl.ui.theme.WarnAmber
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tas5805m.ctrl.data.AmpState
@@ -94,20 +97,19 @@ fun EqScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             Text(
                 "Mode ${state.modeName()}: band 0–2 dikunci (crossover)",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFFFFB74D),
+                color = WarnAmber,
                 modifier = Modifier.padding(horizontal = 12.dp)
             )
         }
 
         // —— Frequency response curve (hero) ——
-        Card(
+        GlassCard(
             modifier = Modifier
-                .fillMaxWidth()
                 .padding(horizontal = 12.dp)
                 .height(160.dp),
-            shape = RoundedCornerShape(12.dp)
+            contentPadding = 0.dp
         ) {
-            Box(Modifier.fillMaxSize().background(Color(0xFF121212)).padding(8.dp)) {
+            Box(Modifier.fillMaxSize().padding(8.dp)) {
                 EqCurve(
                     gainsL = src,
                     gainsR = if (linkEff) src else state.eqRight,
@@ -289,6 +291,16 @@ fun EqCurve(
         }
 
         val pathL = buildPath(gainsL)
+        val nFill = min(gainsL.size, logPos.size)
+        if (nFill > 1) {
+            val fill = Path().apply {
+                addPath(pathL)
+                lineTo(logPos[nFill - 1] * w, h)
+                lineTo(logPos[0] * w, h)
+                close()
+            }
+            drawPath(fill, Brush.verticalGradient(listOf(primary.copy(alpha = 0.22f), Color.Transparent)))
+        }
         drawPath(pathL, primary, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
 
         // Dots on bands

@@ -11,7 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import com.tas5805m.ctrl.ui.components.CardTitle
+import com.tas5805m.ctrl.ui.components.GlassCard
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -88,9 +89,9 @@ fun OtaCard(spp: SppClient, connected: Boolean) {
         }
     }
 
-    Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+    GlassCard(Modifier.padding(top = 8.dp), contentPadding = 0.dp) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Update Firmware (OTA)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            CardTitle("Update Firmware (OTA)")
             Text(
                 "Mengirim firmware.bin lewat Bluetooth ke perangkat yang sedang tersambung (master/stereo). Slave sub nirkabel belum didukung. " +
                     "Pilih file untuk ENV yang sama dengan perangkat — file untuk env lain akan memasang firmware yang salah (pemulihan: flash USB).",

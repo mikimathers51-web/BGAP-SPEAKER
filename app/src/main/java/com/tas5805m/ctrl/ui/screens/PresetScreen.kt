@@ -161,8 +161,9 @@ fun PresetScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 
 @Composable
 private fun PresetRow(p: Preset, enabled: Boolean, reason: String?, warning: String?, onApply: () -> Unit, onDelete: (() -> Unit)?) {
-    Card {
+    com.tas5805m.ctrl.ui.components.GlassCard(contentPadding = 0.dp) {
         ListItem(
+            colors = com.tas5805m.ctrl.ui.components.glassListItemColors(),
             headlineContent = { Text(p.name) },
             supportingContent = {
                 Column {
