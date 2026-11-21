@@ -23,12 +23,12 @@ val BadRed        = Color(0xFFF87171)
 val AccentCyan    = Color(0xFF7DD3FC)
 val AccentAmber   = Color(0xFFFBBF24)
 
-val DarkBackground = Color(0xFF05070A)
-val DarkSurface    = Color(0xFF111827)
-val DarkSurfaceVar = Color(0xFF121212)
-val TextPrimary    = Color(0xFFE5E7EB)
+val DarkBackground = Color(0xFF05070A)   // HTML --panel
+val DarkSurface    = Color(0xFF0A0C10)
+val DarkSurfaceVar = Color(0xFF111827)
+val TextPrimary    = Color(0xFFE5E7EB)   // HTML --fg
 val TextSecondary  = Color(0xFFCBD5E1)
-val TextMuted      = Color(0xFF94A3B8)
+val TextMuted      = Color(0xFF94A3B8)   // HTML --muted
 val TextDim        = Color(0xFF64748B)
 
 // ========================================================
@@ -53,14 +53,14 @@ private val LocalResolveDark = compositionLocalOf { true }
 // Color schemes
 // ========================================================
 private val AmoledDarkColors = darkColorScheme(
-    primary          = AccentCyan,
+    primary          = AccentCyan,          // #7DD3FC
     onPrimary        = Color(0xFF001824),
-    secondary        = AccentAmber,
+    secondary        = AccentAmber,         // #FBBF24
     tertiary         = AccentAmber,
     onSecondary      = Color(0xFF1F1300),
-    background       = Color.Black,
+    background       = Color.Black,         // HTML --bg #000
     onBackground     = TextPrimary,
-    surface          = Color.Black,
+    surface          = DarkBackground,      // #05070A
     onSurface        = TextPrimary,
     surfaceVariant   = DarkSurfaceVar,
     onSurfaceVariant = TextMuted,
