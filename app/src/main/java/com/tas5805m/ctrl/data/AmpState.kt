@@ -7,7 +7,15 @@ data class AmpState(
 
     // Core
     val mode: Int = 0,
+    /** HPF satelit (kunci lama `xover=`; firmware lama: HPF = LPF). */
     val xover: Int = 100,
+    /** LPF sub (`xlp=`, firmware ≥ 2.9.22 dengan CAPS `xover2`); firmware lama: sama dengan [xover]. */
+    val xoverLp: Int = 100,
+    /** 2-way aktif mono (mode 2, firmware ≥ 2.9.23, CAPS `tway`): baris `TWAY on= hz= min= max= fs=`. */
+    val tway: Boolean = false,
+    val twayHz: Int = 2500,
+    val twayMin: Int = 1000,
+    val twayMax: Int = 5000,
     val master: Int = 80,
     val sat: Int = 100,
     val sub: Int = 100,
@@ -105,6 +113,12 @@ data class AmpState(
 ) {
     fun tag(t: String, k: String): String? = tags[t]?.get(k)
     fun tagInt(t: String, k: String): Int? = tags[t]?.get(k)?.toIntOrNull()
+    /** HPF satelit dan LPF sub bisa diatur terpisah (`xover_hp` / `xover_lp`). */
+    val hasXover2 get() = "xover2" in caps
+    /** 2-way aktif mono tersedia (hanya bermakna di mode 2). */
+    val hasTway get() = "tway" in caps
+    /** 2-way sedang aktif: filter tabel xover tidak dipakai. */
+    val twayActive get() = hasTway && mode == 2 && tway
     val hasClip get() = "clip" in caps
     val hasMod get() = "mod" in caps
     val hasDac get() = "dac" in caps
@@ -229,6 +243,8 @@ data class Preset(
     val id: String = newPresetId(),
     val mode: Int = 0,
     val xover: Int = 100,
+    /** LPF sub bila berbeda dari [xover] (HPF satelit); null = sama dengan [xover] (preset lama). */
+    val xoverLp: Int? = null,
     val master: Int = 80,
     val sat: Int = 100,
     val sub: Int = 100,

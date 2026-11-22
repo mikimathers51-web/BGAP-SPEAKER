@@ -130,7 +130,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val clip = listOf("gain", "ml", "mr").map { s.tagInt("CLIP", it) }
         val p = Preset(
             name = name.ifBlank { "Preset ${System.currentTimeMillis() % 10000}" },
-            mode = s.mode, xover = s.xover, master = s.master, sat = s.sat,
+            mode = s.mode, xover = s.xover,
+            xoverLp = if (s.hasXover2 && s.xoverLp != s.xover) s.xoverLp else null,
+            master = s.master, sat = s.sat,
             sub = s.sub, ctr = s.ctr, gain = s.gain, eqOn = s.eqOn,
             ll = s.ll, lr = s.lr, rl = s.rl, rr = s.rr,
             eqLeft = s.eqLeft, eqRight = s.eqRight,

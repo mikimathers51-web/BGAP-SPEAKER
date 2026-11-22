@@ -13,7 +13,7 @@ object LineParser {
     /** Baris yang di-poll terus (tidak masuk log; tetap diparse & disimpan di rawByHead). */
     val QUIET_HEADS = setOf(
         "WLVL", "LVL", "LVL2", "WSUB", "WSUBS", "WSUBD", "WSUBT", "WSUBC", "WSUBV", "BTD", "BTEV",
-        "MODE", "STATE", "FX", "VER",
+        "MODE", "STATE", "FX", "VER", "TWAY",
     )
 
     /** `OK <perintah>` ini tidak menghapus pesan ERR terakhir (hanya balasan sinkron/poll). */
@@ -28,6 +28,7 @@ object LineParser {
         when (head) {
             "MODE" -> ns = parseMode(ns, line)
             "STATE" -> ns = parseState(ns, line)
+            "TWAY" -> ns = parseTway(ns, line)
             "FAULT" -> ns = addFaultEvent(parseFault(ns, line), 1, line, nowMs)
             "FAULT2" -> ns = addFaultEvent(
                 ns.copy(fault2Raw = line, tags = ns.tags + ("FAULT2" to kvOf(line))), 2, line, nowMs
@@ -95,21 +96,25 @@ object LineParser {
     private fun parseMode(s: AmpState, line: String): AmpState {
         val parts = line.split(Regex("\\s+"))
         var mode = s.mode
-        var xover = s.xover; var master = s.master; var sat = s.sat; var sub = s.sub; var ctr = s.ctr
+        var xover = s.xover; var xoverLp = s.xoverLp; var sawLp = false
+        var master = s.master; var sat = s.sat; var sub = s.sub; var ctr = s.ctr
         if (parts.size >= 2) mode = parts[1].toIntOrNull() ?: mode
         for (p in parts.drop(2)) {
             val kv = p.split("=")
             if (kv.size != 2) continue
             val v = kv[1].toIntOrNull() ?: continue
             when (kv[0]) {
-                "xover" -> xover = v
+                "xover", "xhp" -> xover = v
+                "xlp" -> { xoverLp = v; sawLp = true }
                 "master" -> master = v
                 "sat" -> sat = v
                 "sub" -> sub = v
                 "ctr" -> ctr = v
             }
         }
-        return s.copy(mode = mode, xover = xover, master = master, sat = sat, sub = sub, ctr = ctr)
+        // Firmware lama tidak mengirim xlp: LPF = HPF (satu nilai xover untuk keduanya)
+        if (!sawLp) xoverLp = xover
+        return s.copy(mode = mode, xover = xover, xoverLp = xoverLp, master = master, sat = sat, sub = sub, ctr = ctr)
     }
 
     private fun parseState(s: AmpState, line: String): AmpState {
@@ -185,6 +190,17 @@ object LineParser {
         }
         return if (is2) s.copy(lvl2L = l ?: s.lvl2L, lvl2R = r ?: s.lvl2R)
         else s.copy(lvlL = l ?: s.lvlL, lvlR = r ?: s.lvlR)
+    }
+
+    /** `TWAY on=0|1 hz=<fc> min=<hz> max=<hz> fs=<Hz>` (firmware ≥ 2.9.23, hanya di mode 2). */
+    private fun parseTway(s: AmpState, line: String): AmpState {
+        val kv = kvOf(line)
+        return s.copy(
+            tway = kv["on"]?.let { it == "1" } ?: s.tway,
+            twayHz = kv["hz"]?.toIntOrNull() ?: s.twayHz,
+            twayMin = kv["min"]?.toIntOrNull() ?: s.twayMin,
+            twayMax = kv["max"]?.toIntOrNull() ?: s.twayMax,
+        )
     }
 
     private fun parseVoice(s: AmpState, line: String): AmpState {

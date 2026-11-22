@@ -18,6 +18,7 @@ object PresetJson {
         put("note", p.note)
         put("mode", p.mode)
         put("xover", p.xover)
+        p.xoverLp?.let { put("xoverLp", it) }
         put("master", p.master)
         put("sat", p.sat)
         put("sub", p.sub)
@@ -83,6 +84,7 @@ object PresetJson {
             note = o.optString("note"),
             mode = o.optInt("mode"),
             xover = o.optInt("xover", 100),
+            xoverLp = if (o.has("xoverLp")) o.optInt("xoverLp", 100) else null,
             master = o.optInt("master", 80),
             sat = o.optInt("sat", 100),
             sub = o.optInt("sub", 100),

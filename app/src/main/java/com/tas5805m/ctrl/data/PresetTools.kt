@@ -40,6 +40,7 @@ object PresetTools {
         kind = if (p.kind in setOf("full", "eq", "voice", "scene")) p.kind else "full",
         mode = p.mode.coerceIn(0, 4),
         xover = p.xover.coerceIn(60, 150),
+        xoverLp = p.xoverLp?.coerceIn(60, 150),
         master = p.master.coerceIn(0, 100),
         sat = p.sat.coerceIn(0, 100),
         sub = p.sub.coerceIn(0, 100),
