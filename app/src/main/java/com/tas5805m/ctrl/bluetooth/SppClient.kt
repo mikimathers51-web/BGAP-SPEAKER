@@ -296,7 +296,11 @@ class SppClient(private val context: Context) {
     fun setSat(v: Int) = send("satvol $v")
     fun setSub(v: Int) = send("subvol $v")
     fun setCtr(v: Int) = send("ctr $v")
-    fun setXover(hz: Int) = send("xover $hz")
+    fun setXover(hz: Int) = send("xover $hz")          // HPF satelit + LPF sub sekaligus
+    fun setXoverHp(hz: Int) = send("xover_hp $hz")     // hanya HPF satelit (CAPS xover2)
+    fun setXoverLp(hz: Int) = send("xover_lp $hz")     // hanya LPF sub (CAPS xover2)
+    fun setTway(on: Boolean) = send("tway ${if (on) 1 else 0}")   // 2-way aktif mono, mode 2 (CAPS tway)
+    fun setTwayHz(hz: Int) = send("tway_hz $hz")
     fun setGain(g: Int) = send("gain $g")
     fun setAmp(s: String) = send("ampstate $s")
     fun setEq(on: Boolean) = send(if (on) "eq on" else "eq off")
@@ -396,7 +400,11 @@ class SppClient(private val context: Context) {
             delay(140)
         }
         val lockEq = mode != 0          // eq off & band 0..2 ditolak saat crossover aktif
-        if (p.xover != st.xover || mode != st.mode) setXover(p.xover)
+        val hp = p.xover; val lp = p.xoverLp ?: p.xover
+        if (hp != st.xover || lp != st.xoverLp || mode != st.mode) {
+            // Firmware tanpa xover2 (atau HPF = LPF): satu perintah; selain itu terpisah
+            if (!st.hasXover2 || hp == lp) setXover(hp) else { setXoverHp(hp); setXoverLp(lp) }
+        }
         setMaster(p.master)
         setSat(p.sat)
         setSub(p.sub)
