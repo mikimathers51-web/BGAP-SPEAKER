@@ -28,6 +28,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +43,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tas5805m.ctrl.bluetooth.SppClient
+import com.tas5805m.ctrl.data.AmpState
 import com.tas5805m.ctrl.data.AppViewModel
 import com.tas5805m.ctrl.ui.components.CardTitle
 import com.tas5805m.ctrl.ui.components.GlassBadge
@@ -54,6 +59,117 @@ import com.tas5805m.ctrl.ui.theme.OkGreen
 import com.tas5805m.ctrl.ui.theme.WarnAmber
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+
+/**
+ * 2-way aktif mono (firmware ≥ 2.9.23, CAPS `tway`, hanya mode 2): kanal L = tweeter (HPF), kanal R = woofer (LPF),
+ * Linkwitz-Riley orde-4 di satu frekuensi. Batas bawah (`twayMin`) melindungi tweeter karena firmware tidak punya limiter.
+ * Tiap perubahan frekuensi menulis ulang biquad DSP (I2C) → kirim hanya saat slider dilepas.
+ */
+@Composable
+private fun TwayCard(state: AmpState, spp: SppClient) {
+    GlassCard {
+        CardTitle("2-way aktif (mono)", trailing = { GlassBadge(if (state.tway) "${state.twayHz} Hz · LR4" else "OFF") })
+        SwitchRow(
+            title = "Aktifkan 2-way",
+            sub = "Kanal L = tweeter (HPF), kanal R = woofer (LPF), mixer mono. Pastikan tweeter ke OUT_L dan woofer ke OUT_R sebelum mengaktifkan.",
+            checked = state.tway,
+            onChange = { spp.setTway(it) },
+        )
+        if (state.tway) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("CROSSOVER", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${state.twayHz} Hz", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            }
+            SendSlider(
+                value = state.twayHz.toFloat(),
+                onSend = { v -> spp.setTwayHz(((v / 50f).roundToInt() * 50).coerceIn(state.twayMin, state.twayMax)) },
+                valueRange = state.twayMin.toFloat()..state.twayMax.toFloat(),
+                live = false,
+                snap = { v -> (v / 50f).roundToInt() * 50f },
+            )
+            Text(
+                "HPF tweeter dibatasi ≥ ${state.twayMin} Hz. Tanpa limiter: turunkan volume dan periksa dengan sweep sebelum musik. " +
+                    "Slider Tweeter/Woofer mengatur level masing-masing; tombol fase di Woofer membalik polaritas woofer.",
+                style = MaterialTheme.typography.bodySmall,
+                color = WarnAmber,
+            )
+        }
+    }
+}
+
+/**
+ * Crossover. Firmware ≥ 2.9.22 (CAPS `xover2`): HPF satelit dan LPF sub terpisah, dengan sakelar "kunci bersama"
+ * (aktif = satu `xover` untuk keduanya, seperti sebelumnya). Firmware lama: satu slider.
+ * Tabel profil HF_/LF_ hanya 60–150 Hz per 10 Hz; tiap perubahan menyetel ulang filter DSP (I2C) → kirim saat dilepas.
+ */
+@Composable
+private fun CrossoverCard(state: AmpState, spp: SppClient) {
+    val snap = { v: Float -> ((v / 10f).roundToInt() * 10).coerceIn(60, 150) }
+    val split = state.hasXover2
+    var linked by remember { mutableStateOf(state.xover == state.xoverLp) }
+
+    GlassCard {
+        CardTitle("Crossover", trailing = { GlassBadge("60–150 Hz · 10 Hz") })
+        if (!split) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("LPF SUB  ⇄  HPF SAT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${state.xover} Hz", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            }
+            SendSlider(
+                value = state.xover.toFloat(),
+                onSend = { spp.setXover(snap(it)) },
+                valueRange = 60f..150f,
+                steps = 8,
+                live = false,
+            )
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(if (linked) "HPF SAT  ⇄  LPF SUB" else "HPF SAT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${state.xover} Hz", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            }
+            SendSlider(
+                value = state.xover.toFloat(),
+                onSend = { v -> if (linked) spp.setXover(snap(v)) else spp.setXoverHp(snap(v)) },
+                valueRange = 60f..150f,
+                steps = 8,
+                live = false,
+            )
+            if (!linked) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("LPF SUB", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${state.xoverLp} Hz", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                }
+                SendSlider(
+                    value = state.xoverLp.toFloat(),
+                    onSend = { v -> spp.setXoverLp(snap(v)) },
+                    valueRange = 60f..150f,
+                    steps = 8,
+                    live = false,
+                )
+                val hp = state.xover
+                val lp = state.xoverLp
+                if (hp != lp) {
+                    Text(
+                        if (hp < lp) "Overlap $hp–$lp Hz: satelit dan sub sama-sama memainkan rentang ini (bass bisa menebal)."
+                        else "Celah $lp–$hp Hz: tidak ada yang memainkan rentang ini (bass bisa melubang).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            SwitchRow(
+                title = "Kunci bersama",
+                sub = "HPF satelit = LPF sub (satu nilai). Matikan untuk mengatur terpisah; filter dirancang untuk frekuensi sama, periksa respons dengan sweep.",
+                checked = linked,
+                onChange = { on ->
+                    linked = on
+                    // Menyalakan kunci menyamakan LPF ke HPF (satu perintah `xover`)
+                    if (on && state.xover != state.xoverLp) spp.setXover(state.xover)
+                },
+            )
+        }
+    }
+}
 
 /**
  * Home / Kontrol — gaya Glass (sama dengan prototipe), hanya berisi kontrol yang benar-benar ada di firmware:
@@ -121,7 +237,7 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         if (state.mode != 0) {
             GlassCard {
                 CardTitle("Channel Mix")
-                ChannelRow("Subwoofer", state.sub, trailing = {
+                ChannelRow(if (state.twayActive) "Woofer (R)" else "Subwoofer", state.sub, trailing = {
                     if (state.hasSubInv && state.hasSubPath) {
                         OutlinedButton(
                             onClick = { spp.setSubInv(!state.subInv) },
@@ -133,7 +249,7 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                     }
                 }) { spp.setSub(it) }
                 GlassGap()
-                ChannelRow("Satellite", state.sat) { spp.setSat(it) }
+                ChannelRow(if (state.twayActive) "Tweeter (L)" else "Satellite", state.sat) { spp.setSat(it) }
                 if (state.is31) {
                     GlassGap()
                     ChannelRow("Center", state.ctr) { spp.setCtr(it) }
@@ -141,22 +257,10 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             }
         }
 
-        // —— Crossover: satu nilai untuk LPF sub + HPF sat; firmware membulatkan per 10 Hz (tabel, bukan LR4 terhitung) ——
-        GlassCard {
-            CardTitle("Crossover", trailing = { GlassBadge("60–150 Hz · 10 Hz") })
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("LPF SUB  ⇄  HPF SAT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${state.xover} Hz", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-            }
-            // live = false: tiap `xover` menyetel ulang filter DSP (I2C) + status panjang → kirim hanya saat dilepas
-            SendSlider(
-                value = state.xover.toFloat(),
-                onSend = { spp.setXover(((it / 10f).roundToInt() * 10).coerceIn(60, 150)) },
-                valueRange = 60f..150f,
-                steps = 8,
-                live = false,
-            )
-        }
+        // —— Crossover: HPF satelit & LPF sub (terpisah bila firmware ≥ 2.9.22 / CAPS xover2) ——
+        // 2-way aktif mono (mode 2, CAPS tway): L = tweeter HPF, R = woofer LPF (LR4); menggantikan crossover tabel saat aktif
+        if (state.hasTway && state.mode == 2) TwayCard(state, spp)
+        if (!state.twayActive) CrossoverCard(state, spp)
 
         // —— Gain analog (0..31, −0,5 dB per langkah) ——
         GlassCard {
