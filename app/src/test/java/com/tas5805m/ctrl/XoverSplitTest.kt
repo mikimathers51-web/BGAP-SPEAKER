@@ -83,4 +83,28 @@ class XoverSplitTest {
         assertFalse(base.copy(caps = emptySet()).twayActive)     // firmware tanpa fitur
         assertFalse(base.copy(tway = false).twayActive)
     }
+
+    // ---- Loudness sub (firmware 2.9.24, CAPS subloud, mode 2) ----
+
+    @Test fun subloudLine_isParsed() {
+        val s = LineParser.apply(AmpState(), "SUBLOUD on=1 db10=45 lo=25 hi=60 cur=30")
+        assertTrue(s.subloud)
+        assertEquals(45, s.subloudDb10)
+        assertEquals(25, s.subloudLo)
+        assertEquals(60, s.subloudHi)
+        assertEquals(30, s.subloudCur)
+    }
+
+    @Test fun subloudLine_off_keepsOtherFields() {
+        val on = LineParser.apply(AmpState(), "SUBLOUD on=1 db10=60 lo=30 hi=70 cur=60")
+        val off = LineParser.apply(on, "SUBLOUD on=0 db10=60 lo=30 hi=70 cur=0")
+        assertFalse(off.subloud)
+        assertEquals(0, off.subloudCur)
+        assertEquals(60, off.subloudDb10)
+    }
+
+    @Test fun subloudCaps() {
+        assertFalse(AmpState().hasSubloud)
+        assertTrue(LineParser.apply(AmpState(), "CAPS eqband tway subloud").hasSubloud)
+    }
 }
