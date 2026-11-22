@@ -16,6 +16,12 @@ data class AmpState(
     val twayHz: Int = 2500,
     val twayMin: Int = 1000,
     val twayMax: Int = 5000,
+    /** Loudness sub (mode 1–4, firmware ≥ 2.9.25, CAPS `subloud`): baris `SUBLOUD on= db10= lo= hi= cur=`. */
+    val subloud: Boolean = false,
+    val subloudDb10: Int = 60,   // boost maks, dB×10 (0..60)
+    val subloudLo: Int = 30,     // master ≤ lo → boost penuh
+    val subloudHi: Int = 70,     // master ≥ hi → 0 dB
+    val subloudCur: Int = 0,     // boost yang sedang diterapkan, dB×10
     val master: Int = 80,
     val sat: Int = 100,
     val sub: Int = 100,
@@ -117,6 +123,8 @@ data class AmpState(
     val hasXover2 get() = "xover2" in caps
     /** 2-way aktif mono tersedia (hanya bermakna di mode 2). */
     val hasTway get() = "tway" in caps
+    /** Loudness sub tersedia (bermakna di mode 1–4; mode 0 tanpa sub). */
+    val hasSubloud get() = "subloud" in caps
     /** 2-way sedang aktif: filter tabel xover tidak dipakai. */
     val twayActive get() = hasTway && mode == 2 && tway
     val hasClip get() = "clip" in caps

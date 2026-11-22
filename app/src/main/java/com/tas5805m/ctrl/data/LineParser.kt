@@ -13,7 +13,7 @@ object LineParser {
     /** Baris yang di-poll terus (tidak masuk log; tetap diparse & disimpan di rawByHead). */
     val QUIET_HEADS = setOf(
         "WLVL", "LVL", "LVL2", "WSUB", "WSUBS", "WSUBD", "WSUBT", "WSUBC", "WSUBV", "BTD", "BTEV",
-        "MODE", "STATE", "FX", "VER", "TWAY",
+        "MODE", "STATE", "FX", "VER", "TWAY", "SUBLOUD",
     )
 
     /** `OK <perintah>` ini tidak menghapus pesan ERR terakhir (hanya balasan sinkron/poll). */
@@ -29,6 +29,7 @@ object LineParser {
             "MODE" -> ns = parseMode(ns, line)
             "STATE" -> ns = parseState(ns, line)
             "TWAY" -> ns = parseTway(ns, line)
+            "SUBLOUD" -> ns = parseSubloud(ns, line)
             "FAULT" -> ns = addFaultEvent(parseFault(ns, line), 1, line, nowMs)
             "FAULT2" -> ns = addFaultEvent(
                 ns.copy(fault2Raw = line, tags = ns.tags + ("FAULT2" to kvOf(line))), 2, line, nowMs
@@ -190,6 +191,18 @@ object LineParser {
         }
         return if (is2) s.copy(lvl2L = l ?: s.lvl2L, lvl2R = r ?: s.lvl2R)
         else s.copy(lvlL = l ?: s.lvlL, lvlR = r ?: s.lvlR)
+    }
+
+    /** `SUBLOUD on=0|1 db10=<0..60> lo=<0..99> hi=<lo+1..100> cur=<dB×10>` (firmware ≥ 2.9.25, mode 1–4). */
+    private fun parseSubloud(s: AmpState, line: String): AmpState {
+        val kv = kvOf(line)
+        return s.copy(
+            subloud = kv["on"]?.let { it == "1" } ?: s.subloud,
+            subloudDb10 = kv["db10"]?.toIntOrNull() ?: s.subloudDb10,
+            subloudLo = kv["lo"]?.toIntOrNull() ?: s.subloudLo,
+            subloudHi = kv["hi"]?.toIntOrNull() ?: s.subloudHi,
+            subloudCur = kv["cur"]?.toIntOrNull() ?: s.subloudCur,
+        )
     }
 
     /** `TWAY on=0|1 hz=<fc> min=<hz> max=<hz> fs=<Hz>` (firmware ≥ 2.9.23, hanya di mode 2). */
