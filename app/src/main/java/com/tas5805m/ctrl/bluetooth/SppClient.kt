@@ -301,6 +301,8 @@ class SppClient(private val context: Context) {
     fun setXoverLp(hz: Int) = send("xover_lp $hz")     // hanya LPF sub (CAPS xover2)
     fun setTway(on: Boolean) = send("tway ${if (on) 1 else 0}")   // 2-way aktif mono, mode 2 (CAPS tway)
     fun setTwayHz(hz: Int) = send("tway_hz $hz")
+    fun setSubloud(on: Boolean) = send("subloud ${if (on) 1 else 0}")        // loudness sub, mode 2 (CAPS subloud)
+    fun setSubloudCfg(db10: Int, lo: Int, hi: Int) = send("subloud_cfg $db10 $lo $hi")
     fun setGain(g: Int) = send("gain $g")
     fun setAmp(s: String) = send("ampstate $s")
     fun setEq(on: Boolean) = send(if (on) "eq on" else "eq off")
