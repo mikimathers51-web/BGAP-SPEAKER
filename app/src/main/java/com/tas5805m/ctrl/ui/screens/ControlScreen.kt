@@ -58,7 +58,71 @@ import com.tas5805m.ctrl.ui.theme.BadRed
 import com.tas5805m.ctrl.ui.theme.OkGreen
 import com.tas5805m.ctrl.ui.theme.WarnAmber
 import kotlinx.coroutines.delay
+import java.util.Locale
 import kotlin.math.roundToInt
+
+/**
+ * Loudness sub (firmware ≥ 2.9.25, CAPS `subloud`, mode 1–4; mode 0 tanpa sub): gain sub naik otomatis saat master volume turun,
+ * supaya bass tetap terdengar pelan-pelan. Boost 0 dB di master ≥ "mulai di", naik linear (dB) sampai boost maks di master ≤ "penuh di".
+ * Boost = gain digital lebih besar → bass sangat keras bisa clipping; batas keras +6 dB.
+ */
+@Composable
+private fun SubLoudCard(state: AmpState, spp: SppClient) {
+    GlassCard {
+        CardTitle("Loudness sub", trailing = {
+            GlassBadge(if (state.subloud) "+%.1f dB".format(Locale.US, state.subloudCur / 10f) else "OFF")
+        })
+        SwitchRow(
+            title = "Sub otomatis lebih keras saat volume pelan",
+            sub = "Telinga kurang peka pada bass di volume kecil. Boost naik saat master turun, hilang di volume tinggi.",
+            checked = state.subloud,
+            onChange = { spp.setSubloud(it) },
+        )
+        if (state.subloud) {
+            val db10 = state.subloudDb10
+            val lo = state.subloudLo
+            val hi = state.subloudHi
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("BOOST MAKS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("+%.1f dB".format(Locale.US, db10 / 10f), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            }
+            SendSlider(
+                value = db10 / 10f,
+                onSend = { v -> spp.setSubloudCfg(((v * 2f).roundToInt() * 5).coerceIn(0, 60), lo, hi) },   // langkah 0,5 dB
+                valueRange = 0f..6f,
+                steps = 11,
+                live = false,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("MULAI DI MASTER ≤", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("$hi %", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            }
+            SendSlider(
+                value = hi.toFloat(),
+                onSend = { v -> spp.setSubloudCfg(db10, lo, ((v / 5f).roundToInt() * 5).coerceIn(lo + 5, 100)) },
+                valueRange = 20f..100f,
+                steps = 15,
+                live = false,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("BOOST PENUH DI MASTER ≤", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("$lo %", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            }
+            SendSlider(
+                value = lo.toFloat(),
+                onSend = { v -> spp.setSubloudCfg(db10, ((v / 5f).roundToInt() * 5).coerceIn(0, hi - 5), hi) },
+                valueRange = 0f..95f,
+                steps = 18,
+                live = false,
+            )
+            Text(
+                "Boost = gain digital lebih besar: bass sangat keras bisa clipping. Uji dengan sweep bass di volume pelan.",
+                style = MaterialTheme.typography.bodySmall,
+                color = WarnAmber,
+            )
+        }
+    }
+}
 
 /**
  * 2-way aktif mono (firmware ≥ 2.9.23, CAPS `tway`, hanya mode 2): kanal L = tweeter (HPF), kanal R = woofer (LPF),
@@ -260,6 +324,8 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         // —— Crossover: HPF satelit & LPF sub (terpisah bila firmware ≥ 2.9.22 / CAPS xover2) ——
         // 2-way aktif mono (mode 2, CAPS tway): L = tweeter HPF, R = woofer LPF (LR4); menggantikan crossover tabel saat aktif
         if (state.hasTway && state.mode == 2) TwayCard(state, spp)
+        // Loudness sub (mode 1–4, CAPS subloud; mode 0 tanpa sub): sub dinaikkan otomatis saat master volume turun
+        if (state.hasSubloud && state.mode != 0) SubLoudCard(state, spp)
         if (!state.twayActive) CrossoverCard(state, spp)
 
         // —— Gain analog (0..31, −0,5 dB per langkah) ——
