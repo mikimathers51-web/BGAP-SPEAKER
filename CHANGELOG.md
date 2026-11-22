@@ -1,6 +1,17 @@
 # Changelog
 
 
+## 3.15.0
+- **2-way aktif mono** (firmware ≥ 2.9.23, CAPS `tway`, hanya mode 2): kartu *2-way aktif (mono)* di Home — sakelar `tway`, slider crossover (`tway_hz`, langkah 50 Hz, dibatasi `min`/`max` dari firmware, bawaan 1000–5000 Hz). Kanal L = tweeter (HPF), kanal R = woofer (LPF), Linkwitz-Riley orde-4. Saat aktif, kartu Crossover tabel disembunyikan dan Channel Mix berlabel *Tweeter (L)* / *Woofer (R)*.
+- `AmpState`: `tway`, `twayHz`, `twayMin`, `twayMax`, `hasTway`, `twayActive`; baris `TWAY …` diparse (tidak masuk log).
+- Uji unit: `XoverSplitTest` ditambah kasus TWAY.
+
+## 3.14.0
+- **Crossover terpisah** (firmware ≥ 2.9.22, CAPS `xover2`): kartu Crossover di Home punya slider *HPF SAT* dan *LPF SUB* sendiri (60–150 Hz, snap 10 Hz) dengan sakelar **Kunci bersama** (aktif = satu perintah `xover` untuk keduanya, seperti sebelumnya). Bila tidak dikunci dan HPF ≠ LPF, tampil peringatan overlap/celah. Firmware lama tetap memakai satu slider.
+- Perintah baru `xover_hp` / `xover_lp`; baris `MODE` memuat `xhp=`/`xlp=` (`xover=` tetap = HPF). `AmpState.xoverLp` (firmware lama: sama dengan `xover`).
+- **Preset** menyimpan `xoverLp` (opsional; preset lama = LPF sama dengan HPF) dan menerapkannya lewat `xover_hp` + `xover_lp` bila berbeda.
+- Uji unit baru: `XoverSplitTest`.
+
 ## 3.13.0
 - **Wireless:** kartu *Penyelarasan latensi* (firmware ≥ 2.9.21, CAPS `wsub_tune`): slider 0–200 ms (`wsub_extra`) untuk membatasi seberapa jauh sub boleh menunda diri; menampilkan latensi dasar dan yang diperintahkan ke sub (`latb`/`latc` dari `WSUBT`).
 - **Diagnosa:** kartu *Status ringkas* di paling atas (Amp, Fault, Mode, Firmware, SPP, peer wireless) — hanya data yang benar-benar dilaporkan firmware (tanpa suhu/PVDD/uptime). Judul kartu Diagnosa dan OTA diseragamkan dengan `CardTitle`.
