@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.18.0
+- **Loudness sub ikut volume ponsel** (firmware ≥ 2.9.26): sakelar *Ikut volume ponsel* di kartu Loudness sub; menampilkan volume efektif, master, dan volume ponsel. Baris `SUBLOUD` kini memuat `ph= pv= eff=`; perintah `subloud_phone 0|1`.
+- **Mode 6 — 1 chip mono 2-way** (firmware ≥ 2.9.26, env `esp32dev_1chip_2way`): chip *2W 1c* di pilihan Mode (tidak butuh chip 2). 2-way selalu aktif seperti mode 5: OUT_L = tweeter (HPF), OUT_R = woofer (LPF), mono; kartu 2-way hanya slider crossover, Channel Mix *Tweeter (L)* / *Woofer (R)*, Loudness sub tetap tersedia. `AmpState.isMono2Way`, `modeName()` = "2-way 1 Chip".
+- **Mode 5 — 2 chip stereo 2-way** (firmware ≥ 2.9.26, env `esp32dev_2chip_2way`): chip 1 = dua tweeter (HPF), chip 2 = dua woofer (LPF), sinyal tetap stereo. Chip *2W 2c* baru di pilihan Mode (butuh chip 2, CAPS `ctr`). Kartu *2-way aktif (stereo, 2 chip)* tanpa sakelar — hanya slider crossover (`tway_hz`); Channel Mix berlabel *Tweeter (2×)* / *Woofer (2×)* (tombol fase = polaritas kedua woofer). Kartu Crossover tabel, Loudness sub dan Mixer disembunyikan/dikunci di mode ini; preset yang diterapkan di mode 5 tidak mengirim `xover`/mixer. `AmpState.isStereo2Way`, `modeName()` = "2-way Stereo".
+- **Psychoacoustic Bass** (firmware ≥ 2.9.26, CAPS `pbass`, **semua mode 0–4**): kartu *Psychoacoustic Bass* di Home — sakelar, *Jumlah* (0–100 %, langkah 5) dan *FC* (40–150 Hz, langkah 10; titik awal harmonik = frekuensi terendah yang masih dimainkan speaker). Firmware menambahkan harmonik 2f/3f dari bass ke L+R sebelum I2S; badge menampilkan ON · jumlah. Perintah `pbass 0|1` dan `pbass_cfg <amount> <fc>`; baris `PBASS on= amt= fc= act=` diparse (tidak masuk log).
+- **Crossover sampai 300 Hz di mode 2** (firmware CAPS `xext`): slider HPF satelit / LPF sub melebar ke 60–300 Hz hanya di mode 2 dengan firmware yang mendukung; mode lain dan firmware lama tetap 60–150 Hz. Preset mode 2 boleh menyimpan sampai 300 Hz. Peringatan bahwa di atas 150 Hz firmware memakai filter LR4 hitungan.
+- `AmpState`: `pbass`, `pbassAmt`, `pbassFc`, `pbassActive`, `hasPbass`, `hasXext`, `xoverMax`.
+- Uji unit: `XoverSplitTest` (xext) dan `PbassTest` (baru).
+
+
+## 3.17.0
+- **Loudness sub untuk semua mode bersub** (firmware ≥ 2.9.25): kartu *Loudness sub* kini muncul di mode 1, 2, 3, dan 4 (sebelumnya hanya mode 2); mode 0 tetap tanpa kartu karena tidak punya sub. Di mode 4 boost ditambahkan ke level yang dikirim ke slave (resolusi 1 dB), slave tidak perlu di-update.
+
+## 3.16.0
+- **Loudness sub** (firmware ≥ 2.9.24, CAPS `subloud`, hanya mode 2): kartu *Loudness sub* di Home — sakelar, *Boost maks* (0–6 dB, langkah 0,5), *Mulai di master ≤* dan *Boost penuh di master ≤*. Sub naik otomatis saat master volume turun agar bass tetap terdengar pelan-pelan; badge menampilkan boost yang sedang diterapkan. Peringatan clipping untuk bass sangat keras.
+- `AmpState`: `subloud`, `subloudDb10/Lo/Hi/Cur`, `hasSubloud`; baris `SUBLOUD …` diparse (tidak masuk log). Perintah `subloud 0|1` dan `subloud_cfg <db10> <lo> <hi>`.
+- Uji unit: `XoverSplitTest` ditambah kasus SUBLOUD.
 
 ## 3.15.0
 - **2-way aktif mono** (firmware ≥ 2.9.23, CAPS `tway`, hanya mode 2): kartu *2-way aktif (mono)* di Home — sakelar `tway`, slider crossover (`tway_hz`, langkah 50 Hz, dibatasi `min`/`max` dari firmware, bawaan 1000–5000 Hz). Kanal L = tweeter (HPF), kanal R = woofer (LPF), Linkwitz-Riley orde-4. Saat aktif, kartu Crossover tabel disembunyikan dan Channel Mix berlabel *Tweeter (L)* / *Woofer (R)*.
