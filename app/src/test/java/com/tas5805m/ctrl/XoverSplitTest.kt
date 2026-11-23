@@ -107,4 +107,28 @@ class XoverSplitTest {
         assertFalse(AmpState().hasSubloud)
         assertTrue(LineParser.apply(AmpState(), "CAPS eqband tway subloud").hasSubloud)
     }
+
+    // ---- crossover diperluas sampai 300 Hz (firmware CAPS xext, hanya mode 2) ----
+    @Test fun xoverMax_is300OnlyInMode2WithXext() {
+        val caps = LineParser.apply(AmpState(), "CAPS eqband tway xext xover2")
+        assertTrue(caps.hasXext)
+        val m2 = LineParser.apply(caps, "MODE 2 xover=200 master=90 sat=90 ctr=85 sub=90 xhp=200 xlp=300")
+        assertEquals(300, m2.xoverMax)
+        assertEquals(300, m2.xoverLp)
+        val m1 = LineParser.apply(caps, "MODE 1 xover=100 master=90 sat=90 ctr=85 sub=90 xhp=100 xlp=100")
+        assertEquals(150, m1.xoverMax)
+    }
+
+    @Test fun xoverMax_is150WithoutXext() {
+        val old = LineParser.apply(LineParser.apply(AmpState(), "CAPS eqband tway xover2"), "MODE 2 xover=100 master=90 sat=90 ctr=85 sub=90")
+        assertFalse(old.hasXext)
+        assertEquals(150, old.xoverMax)
+    }
+
+    @Test fun presetSanitize_allows300OnlyInMode2() {
+        val m2 = PresetTools.sanitize(Preset(name = "x", mode = 2, xover = 300, xoverLp = 280))
+        assertEquals(300, m2.xover); assertEquals(280, m2.xoverLp)
+        val m1 = PresetTools.sanitize(Preset(name = "x", mode = 1, xover = 300, xoverLp = 280))
+        assertEquals(150, m1.xover); assertEquals(150, m1.xoverLp)
+    }
 }
