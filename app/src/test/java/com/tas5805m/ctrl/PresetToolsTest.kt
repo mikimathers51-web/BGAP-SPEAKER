@@ -1,9 +1,11 @@
 package com.tas5805m.ctrl
 
 import com.tas5805m.ctrl.data.BuiltinPresets
+import com.tas5805m.ctrl.data.PbassParams
 import com.tas5805m.ctrl.data.Preset
 import com.tas5805m.ctrl.data.PresetJson
 import com.tas5805m.ctrl.data.PresetTools
+import com.tas5805m.ctrl.data.SubloudParams
 import com.tas5805m.ctrl.data.VoiceParams
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -139,5 +141,75 @@ class PresetToolsTest {
         assertTrue(PresetTools.warning(treble, 4)!!.contains("Master"))
         val hot = Preset(name = "Panas", kind = "voice", voice = VoiceParams(on = true, pkDb10 = 60))
         assertTrue(PresetTools.warning(hot, 4)!!.contains("limiter"))
+    }
+
+    @Test
+    fun subloudAndPbassSurviveJsonRoundTrip() {
+        val p = Preset(
+            name = "Fx", id = "fx-1", mode = 2,
+            subloud = SubloudParams(on = true, db10 = 40, lo = 25, hi = 75, phone = false),
+            pbass = PbassParams(on = true, amt = 55, fc = 90),
+        )
+        val back = PresetJson.fromJson(PresetJson.toJson(listOf(p))).single()
+        assertEquals(p.subloud, back.subloud)
+        assertEquals(p.pbass, back.pbass)
+    }
+
+    @Test
+    fun oldPresetsWithoutFxStayNull() {
+        val raw = """[{"id":"a","name":"Lama","kind":"full","mode":2,"xover":120}]"""
+        val p = PresetJson.fromJson(raw).single()
+        assertNull(p.subloud)
+        assertNull(p.pbass)
+        assertFalse(PresetJson.toObj(p).has("subloud"))
+        assertFalse(PresetJson.toObj(p).has("pbass"))
+    }
+
+    @Test
+    fun phoneFieldIsOptional() {
+        val raw = """[{"id":"a","name":"X","subloud":{"on":true,"db10":30,"lo":30,"hi":70}}]"""
+        val sl = PresetJson.fromJson(raw).single().subloud
+        assertNotNull(sl)
+        assertNull(sl!!.phone)
+    }
+
+    @Test
+    fun sanitizeClampsFx() {
+        val p = PresetTools.sanitize(Preset(
+            name = "x",
+            subloud = SubloudParams(on = true, db10 = 999, lo = 500, hi = 3, phone = true),
+            pbass = PbassParams(on = true, amt = 500, fc = 1),
+        ))
+        val sl = p.subloud!!
+        assertEquals(60, sl.db10)
+        assertEquals(99, sl.lo)
+        assertTrue("hi harus > lo", sl.hi > sl.lo && sl.hi <= 100)
+        val pb = p.pbass!!
+        assertEquals(100, pb.amt)
+        assertEquals(40, pb.fc)
+        val low = PresetTools.sanitize(Preset(name = "y", subloud = SubloudParams(db10 = -5, lo = -3, hi = -9), pbass = PbassParams(amt = -1, fc = 999)))
+        assertEquals(0, low.subloud!!.db10)
+        assertEquals(0, low.subloud!!.lo)
+        assertEquals(1, low.subloud!!.hi)
+        assertEquals(0, low.pbass!!.amt)
+        assertEquals(150, low.pbass!!.fc)
+    }
+
+    @Test
+    fun subloudWarningIsModeAware() {
+        val p = Preset(name = "s", subloud = SubloudParams(on = true))
+        assertTrue(PresetTools.subloudApplies(2))
+        assertFalse(PresetTools.subloudApplies(0))
+        assertFalse(PresetTools.subloudApplies(5))
+        assertNull(PresetTools.warning(p, 2))
+        assertNotNull(PresetTools.warning(p, 0))
+        assertNull(PresetTools.warning(Preset(name = "off", subloud = SubloudParams(on = false)), 0))
+    }
+
+    @Test
+    fun fxChangesContentKeyForDuplicateDetection() {
+        val a = Preset(name = "a")
+        val b = a.copy(pbass = PbassParams(on = true))
+        assertNotEquals(PresetTools.contentKey(a), PresetTools.contentKey(b))
     }
 }
