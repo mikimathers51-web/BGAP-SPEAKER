@@ -22,6 +22,14 @@ data class AmpState(
     val subloudLo: Int = 30,     // master ≤ lo → boost penuh
     val subloudHi: Int = 70,     // master ≥ hi → 0 dB
     val subloudCur: Int = 0,     // boost yang sedang diterapkan, dB×10
+    val subloudPhone: Boolean = true, // firmware ≥ 2.9.26: loudness ikut volume ponsel (AVRCP), `ph=`
+    val phoneVol: Int = -1,           // volume ponsel 0..127 (`pv=`), -1 = belum diterima
+    val subloudEff: Int = -1,         // volume efektif % yang dipakai kurva (`eff=`), -1 = firmware lama
+    /** Psychoacoustic bass (semua mode, firmware dengan CAPS `pbass`): baris `PBASS on= amt= fc= act=`. */
+    val pbass: Boolean = false,
+    val pbassAmt: Int = 40,      // 0..100
+    val pbassFc: Int = 80,       // 40..150 Hz: titik awal harmonik
+    val pbassActive: Boolean = false,   // efek sedang memproses (gain > 0)
     val master: Int = 80,
     val sat: Int = 100,
     val sub: Int = 100,
@@ -121,12 +129,22 @@ data class AmpState(
     fun tagInt(t: String, k: String): Int? = tags[t]?.get(k)?.toIntOrNull()
     /** HPF satelit dan LPF sub bisa diatur terpisah (`xover_hp` / `xover_lp`). */
     val hasXover2 get() = "xover2" in caps
+    /** Crossover diperluas sampai 300 Hz (firmware CAPS `xext`, hanya berlaku di mode 2 = 1 chip 2.1). */
+    val hasXext get() = "xext" in caps
+    /** Batas atas slider crossover untuk mode saat ini: 300 Hz di mode 2 bila firmware mendukung, selain itu 150 Hz (tabel). */
+    val xoverMax get() = if (hasXext && mode == 2) 300 else 150
     /** 2-way aktif mono tersedia (hanya bermakna di mode 2). */
     val hasTway get() = "tway" in caps
+    /** Psychoacoustic bass tersedia (semua mode). */
+    val hasPbass get() = "pbass" in caps
     /** Loudness sub tersedia (bermakna di mode 1–4; mode 0 tanpa sub). */
     val hasSubloud get() = "subloud" in caps
-    /** 2-way sedang aktif: filter tabel xover tidak dipakai. */
-    val twayActive get() = hasTway && mode == 2 && tway
+    /** 2-way sedang aktif: filter tabel xover tidak dipakai (mode 2 bila `tway` nyala; mode 5 = 2 chip stereo 2-way, selalu aktif). */
+    val twayActive get() = hasTway && ((mode == 2 && tway) || mode == 5 || mode == 6)
+    /** Mode 5: 2 chip stereo 2-way — chip 1 = 2 tweeter (HPF), chip 2 = 2 woofer (LPF), crossover = `tway_hz`. */
+    val isStereo2Way get() = mode == 5
+    /** Mode 6: 1 chip mono 2-way — OUT_L = tweeter (HPF), OUT_R = woofer (LPF), `tway_hz`; selalu aktif. */
+    val isMono2Way get() = mode == 6
     val hasClip get() = "clip" in caps
     val hasMod get() = "mod" in caps
     val hasDac get() = "dac" in caps
@@ -155,15 +173,15 @@ data class AmpState(
 
     /** Firmware: is21() == (mode != 0) -> band EQ 0..2 dicadangkan untuk crossover & `eq off` ditolak (mode 1,2,3,4). */
     val xoverLocksEq get() = mode != 0
-    /** Mode 2 (1-chip 2.1) mengunci mixer (`ERR mixer locked_in_1chip_21`). */
-    val mixerLocked get() = mode == 2
-    /** Mode yang diterima firmware (cermin modeSupported()): master nirkabel hanya mode 4; mode 1/3 butuh chip 2 (CAPS ctr). */
+    /** Mode 2 (1-chip 2.1) dan mode 5 (stereo 2-way) mengunci mixer (`ERR mixer locked_in_1chip_21` / `locked_in_2way`). */
+    val mixerLocked get() = mode == 2 || mode == 5 || mode == 6
+    /** Mode yang diterima firmware (cermin modeSupported()): master nirkabel hanya mode 4; mode 1/3/5 butuh chip 2 (CAPS ctr). */
     fun modeAllowed(m: Int): Boolean = when {
         caps.isEmpty() -> true
         hasWsub -> m == 4
         m == 4 -> false
-        m == 1 || m == 3 -> hasCtr
-        else -> m in 0..2
+        m == 1 || m == 3 || m == 5 -> hasCtr
+        else -> m in 0..2 || m == 6   // mode 6 (1 chip 2-way) tidak butuh chip 2
     }
 
     /** Mode 0 tidak punya sub -> subinv ditolak (`ERR subinv no_sub`). */
@@ -175,6 +193,8 @@ data class AmpState(
         2 -> "2.1 Single-chip"
         3 -> "3.1"
         4 -> "Wireless Sub"
+        5 -> "2-way Stereo"
+        6 -> "2-way 1 Chip"
         else -> "Mode $mode"
     }
 

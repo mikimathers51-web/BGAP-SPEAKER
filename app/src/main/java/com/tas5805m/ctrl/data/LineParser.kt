@@ -13,7 +13,7 @@ object LineParser {
     /** Baris yang di-poll terus (tidak masuk log; tetap diparse & disimpan di rawByHead). */
     val QUIET_HEADS = setOf(
         "WLVL", "LVL", "LVL2", "WSUB", "WSUBS", "WSUBD", "WSUBT", "WSUBC", "WSUBV", "BTD", "BTEV",
-        "MODE", "STATE", "FX", "VER", "TWAY", "SUBLOUD",
+        "MODE", "STATE", "FX", "VER", "TWAY", "SUBLOUD", "PBASS",
     )
 
     /** `OK <perintah>` ini tidak menghapus pesan ERR terakhir (hanya balasan sinkron/poll). */
@@ -30,6 +30,7 @@ object LineParser {
             "STATE" -> ns = parseState(ns, line)
             "TWAY" -> ns = parseTway(ns, line)
             "SUBLOUD" -> ns = parseSubloud(ns, line)
+            "PBASS" -> ns = parsePbass(ns, line)
             "FAULT" -> ns = addFaultEvent(parseFault(ns, line), 1, line, nowMs)
             "FAULT2" -> ns = addFaultEvent(
                 ns.copy(fault2Raw = line, tags = ns.tags + ("FAULT2" to kvOf(line))), 2, line, nowMs
@@ -193,6 +194,17 @@ object LineParser {
         else s.copy(lvlL = l ?: s.lvlL, lvlR = r ?: s.lvlR)
     }
 
+    /** `PBASS on=0|1 amt=<0..100> fc=<40..150> act=0|1` (semua mode, CAPS pbass). */
+    private fun parsePbass(s: AmpState, line: String): AmpState {
+        val kv = kvOf(line)
+        return s.copy(
+            pbass = kv["on"]?.let { it == "1" } ?: s.pbass,
+            pbassAmt = kv["amt"]?.toIntOrNull()?.coerceIn(0, 100) ?: s.pbassAmt,
+            pbassFc = kv["fc"]?.toIntOrNull()?.coerceIn(40, 150) ?: s.pbassFc,
+            pbassActive = kv["act"]?.let { it == "1" } ?: s.pbassActive,
+        )
+    }
+
     /** `SUBLOUD on=0|1 db10=<0..60> lo=<0..99> hi=<lo+1..100> cur=<dB×10>` (firmware ≥ 2.9.25, mode 1–4). */
     private fun parseSubloud(s: AmpState, line: String): AmpState {
         val kv = kvOf(line)
@@ -202,6 +214,9 @@ object LineParser {
             subloudLo = kv["lo"]?.toIntOrNull() ?: s.subloudLo,
             subloudHi = kv["hi"]?.toIntOrNull() ?: s.subloudHi,
             subloudCur = kv["cur"]?.toIntOrNull() ?: s.subloudCur,
+            subloudPhone = kv["ph"]?.let { it == "1" } ?: s.subloudPhone,
+            phoneVol = kv["pv"]?.toIntOrNull() ?: s.phoneVol,
+            subloudEff = kv["eff"]?.toIntOrNull() ?: s.subloudEff,
         )
     }
 
