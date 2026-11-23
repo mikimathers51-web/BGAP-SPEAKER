@@ -62,6 +62,58 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
+ * Psychoacoustic Bass Enhancement (CAPS `pbass`, SEMUA mode 0–4): firmware menambahkan harmonik 2f/3f dari bass ke L+R sebelum I2S,
+ * sehingga speaker kecil / sub yang tidak turun dalam tetap "terdengar" berbass (missing fundamental).
+ * FC = frekuensi terendah yang masih dimainkan speaker (harmonik mulai dari sini). Mode 4: harmonik ikut ke satelit; sub nirkabel menerima audio asli.
+ */
+@Composable
+private fun PbassCard(state: AmpState, spp: SppClient) {
+    GlassCard {
+        CardTitle("Psychoacoustic Bass", trailing = {
+            GlassBadge(if (!state.pbass) "OFF" else if (state.pbassActive) "ON · ${state.pbassAmt} %" else "ON")
+        })
+        SwitchRow(
+            title = "Bass virtual (harmonik)",
+            sub = "Menambah harmonik bass supaya terdengar lebih dalam di speaker kecil / sub yang terbatas. Berlaku di semua mode.",
+            checked = state.pbass,
+            onChange = { spp.setPbass(it) },
+        )
+        if (state.pbass) {
+            val amt = state.pbassAmt
+            val fc = state.pbassFc
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("JUMLAH", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("$amt %", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            }
+            SendSlider(
+                value = amt.toFloat(),
+                onSend = { v -> spp.setPbassCfg(((v / 5f).roundToInt() * 5).coerceIn(0, 100), fc) },
+                valueRange = 0f..100f,
+                steps = 19,
+                live = false,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("FC (HARMONIK MULAI DI)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("$fc Hz", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            }
+            SendSlider(
+                value = fc.toFloat(),
+                onSend = { v -> spp.setPbassCfg(amt, ((v / 10f).roundToInt() * 10).coerceIn(40, 150)) },
+                valueRange = 40f..150f,
+                steps = 10,
+                live = false,
+            )
+            Text(
+                "Setel FC mendekati frekuensi terendah yang masih dimainkan speaker (mis. 60–100 Hz). Harmonik ditambahkan ke sinyal: " +
+                    "volume efektif naik dan ada limiter lunak, tetapi bass keras tetap bisa membuat driver over-excursion — uji dengan volume kecil.",
+                style = MaterialTheme.typography.bodySmall,
+                color = WarnAmber,
+            )
+        }
+    }
+}
+
+/**
  * Loudness sub (firmware ≥ 2.9.25, CAPS `subloud`, mode 1–4; mode 0 tanpa sub): gain sub naik otomatis saat master volume turun,
  * supaya bass tetap terdengar pelan-pelan. Boost 0 dB di master ≥ "mulai di", naik linear (dB) sampai boost maks di master ≤ "penuh di".
  * Boost = gain digital lebih besar → bass sangat keras bisa clipping; batas keras +6 dB.
@@ -81,6 +133,17 @@ private fun SubLoudCard(state: AmpState, spp: SppClient) {
         if (state.subloud) {
             val db10 = state.subloudDb10
             val lo = state.subloudLo
+            if (state.subloudEff >= 0) {   // firmware ≥ 2.9.26 melaporkan ph/pv/eff
+                SwitchRow(
+                    title = "Ikut volume ponsel",
+                    sub = if (state.subloudPhone)
+                        "Volume efektif ${state.subloudEff} % (master ${state.master}%, ponsel " +
+                            (if (state.phoneVol >= 0) "${(state.phoneVol * 100 / 127)} %" else "belum terbaca") + ")."
+                    else "Hanya volume master yang dipakai; geser volume ponsel tidak mengubah boost.",
+                    checked = state.subloudPhone,
+                    onChange = { spp.setSubloudPhone(it) },
+                )
+            }
             val hi = state.subloudHi
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("BOOST MAKS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -132,14 +195,27 @@ private fun SubLoudCard(state: AmpState, spp: SppClient) {
 @Composable
 private fun TwayCard(state: AmpState, spp: SppClient) {
     GlassCard {
-        CardTitle("2-way aktif (mono)", trailing = { GlassBadge(if (state.tway) "${state.twayHz} Hz · LR4" else "OFF") })
-        SwitchRow(
-            title = "Aktifkan 2-way",
-            sub = "Kanal L = tweeter (HPF), kanal R = woofer (LPF), mixer mono. Pastikan tweeter ke OUT_L dan woofer ke OUT_R sebelum mengaktifkan.",
-            checked = state.tway,
-            onChange = { spp.setTway(it) },
-        )
-        if (state.tway) {
+        val m5 = state.isStereo2Way || state.isMono2Way   // mode 5 (2 chip stereo) / 6 (1 chip mono): 2-way selalu aktif (tanpa sakelar)
+        CardTitle(if (state.isStereo2Way) "2-way aktif (stereo, 2 chip)" else if (state.isMono2Way) "2-way aktif (mono, 1 chip)" else "2-way aktif (mono)", trailing = { GlassBadge(if (m5 || state.tway) "${state.twayHz} Hz · LR4" else "OFF") })
+        if (!m5) {
+            SwitchRow(
+                title = "Aktifkan 2-way",
+                sub = "Kanal L = tweeter (HPF), kanal R = woofer (LPF), mixer mono. Pastikan tweeter ke OUT_L dan woofer ke OUT_R sebelum mengaktifkan.",
+                checked = state.tway,
+                onChange = { spp.setTway(it) },
+            )
+        } else {
+            Text(
+                if (state.isStereo2Way)
+                    "Chip 1 = dua tweeter (OUT_L kiri, OUT_R kanan, HPF), chip 2 = dua woofer (OUT_L kiri, OUT_R kanan, LPF); sinyal tetap stereo. " +
+                        "Pastikan wiring sesuai sebelum memutar musik."
+                else
+                    "Satu chip: OUT_L = tweeter (HPF), OUT_R = woofer (LPF), sinyal mono (L+R)/2. Pastikan tweeter ke OUT_L dan woofer ke OUT_R sebelum memutar musik.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (m5 || state.tway) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("CROSSOVER", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("${state.twayHz} Hz", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
@@ -153,7 +229,7 @@ private fun TwayCard(state: AmpState, spp: SppClient) {
             )
             Text(
                 "HPF tweeter dibatasi ≥ ${state.twayMin} Hz. Tanpa limiter: turunkan volume dan periksa dengan sweep sebelum musik. " +
-                    "Slider Tweeter/Woofer mengatur level masing-masing; tombol fase di Woofer membalik polaritas woofer.",
+                    "Slider Tweeter/Woofer mengatur level masing-masing; tombol fase di Woofer membalik polaritas kedua woofer.",
                 style = MaterialTheme.typography.bodySmall,
                 color = WarnAmber,
             )
@@ -168,12 +244,14 @@ private fun TwayCard(state: AmpState, spp: SppClient) {
  */
 @Composable
 private fun CrossoverCard(state: AmpState, spp: SppClient) {
-    val snap = { v: Float -> ((v / 10f).roundToInt() * 10).coerceIn(60, 150) }
+    val xmax = state.xoverMax
+    val snap = { v: Float -> ((v / 10f).roundToInt() * 10).coerceIn(60, xmax) }
+    val xsteps = (xmax - 60) / 10 - 1
     val split = state.hasXover2
     var linked by remember { mutableStateOf(state.xover == state.xoverLp) }
 
     GlassCard {
-        CardTitle("Crossover", trailing = { GlassBadge("60–150 Hz · 10 Hz") })
+        CardTitle("Crossover", trailing = { GlassBadge("60–$xmax Hz · 10 Hz") })
         if (!split) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("LPF SUB  ⇄  HPF SAT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -182,8 +260,8 @@ private fun CrossoverCard(state: AmpState, spp: SppClient) {
             SendSlider(
                 value = state.xover.toFloat(),
                 onSend = { spp.setXover(snap(it)) },
-                valueRange = 60f..150f,
-                steps = 8,
+                valueRange = 60f..xmax.toFloat(),
+                steps = xsteps,
                 live = false,
             )
         } else {
@@ -194,8 +272,8 @@ private fun CrossoverCard(state: AmpState, spp: SppClient) {
             SendSlider(
                 value = state.xover.toFloat(),
                 onSend = { v -> if (linked) spp.setXover(snap(v)) else spp.setXoverHp(snap(v)) },
-                valueRange = 60f..150f,
-                steps = 8,
+                valueRange = 60f..xmax.toFloat(),
+                steps = xsteps,
                 live = false,
             )
             if (!linked) {
@@ -206,8 +284,8 @@ private fun CrossoverCard(state: AmpState, spp: SppClient) {
                 SendSlider(
                     value = state.xoverLp.toFloat(),
                     onSend = { v -> spp.setXoverLp(snap(v)) },
-                    valueRange = 60f..150f,
-                    steps = 8,
+                    valueRange = 60f..xmax.toFloat(),
+                    steps = xsteps,
                     live = false,
                 )
                 val hp = state.xover
@@ -220,6 +298,13 @@ private fun CrossoverCard(state: AmpState, spp: SppClient) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+            if (xmax > 150 && (state.xover > 150 || state.xoverLp > 150)) {
+                Text(
+                    "Di atas 150 Hz firmware memakai filter Linkwitz-Riley orde-4 hitungan (bukan tabel). Pastikan driver sub sanggup memainkan rentang ini dan ukur dengan sweep.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             SwitchRow(
                 title = "Kunci bersama",
@@ -301,7 +386,7 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         if (state.mode != 0) {
             GlassCard {
                 CardTitle("Channel Mix")
-                ChannelRow(if (state.twayActive) "Woofer (R)" else "Subwoofer", state.sub, trailing = {
+                ChannelRow(if (state.isStereo2Way) "Woofer (2×)" else if (state.twayActive) "Woofer (R)" else "Subwoofer", state.sub, trailing = {
                     if (state.hasSubInv && state.hasSubPath) {
                         OutlinedButton(
                             onClick = { spp.setSubInv(!state.subInv) },
@@ -313,7 +398,7 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                     }
                 }) { spp.setSub(it) }
                 GlassGap()
-                ChannelRow(if (state.twayActive) "Tweeter (L)" else "Satellite", state.sat) { spp.setSat(it) }
+                ChannelRow(if (state.isStereo2Way) "Tweeter (2×)" else if (state.twayActive) "Tweeter (L)" else "Satellite", state.sat) { spp.setSat(it) }
                 if (state.is31) {
                     GlassGap()
                     ChannelRow("Center", state.ctr) { spp.setCtr(it) }
@@ -323,9 +408,11 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
 
         // —— Crossover: HPF satelit & LPF sub (terpisah bila firmware ≥ 2.9.22 / CAPS xover2) ——
         // 2-way aktif mono (mode 2, CAPS tway): L = tweeter HPF, R = woofer LPF (LR4); menggantikan crossover tabel saat aktif
-        if (state.hasTway && state.mode == 2) TwayCard(state, spp)
+        if (state.hasTway && (state.mode == 2 || state.mode == 5 || state.mode == 6)) TwayCard(state, spp)
+        // Psychoacoustic bass (CAPS pbass): semua mode 0–4
+        if (state.hasPbass) PbassCard(state, spp)
         // Loudness sub (mode 1–4, CAPS subloud; mode 0 tanpa sub): sub dinaikkan otomatis saat master volume turun
-        if (state.hasSubloud && state.mode != 0) SubLoudCard(state, spp)
+        if (state.hasSubloud && state.mode != 0 && state.mode != 5) SubLoudCard(state, spp)
         if (!state.twayActive) CrossoverCard(state, spp)
 
         // —— Gain analog (0..31, −0,5 dB per langkah) ——
@@ -343,7 +430,7 @@ fun ControlScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         GlassCard {
             CardTitle("Mode")
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(0 to "Stereo", 1 to "2.1 D", 2 to "2.1 S", 3 to "3.1", 4 to "W.Sub")
+                listOf(0 to "Stereo", 1 to "2.1 D", 2 to "2.1 S", 3 to "3.1", 4 to "W.Sub", 5 to "2W 2c", 6 to "2W 1c")
                     .filter { (m, _) -> state.modeAllowed(m) || state.mode == m }
                     .forEach { (m, label) ->
                         FilterChip(
