@@ -302,7 +302,10 @@ class SppClient(private val context: Context) {
     fun setTway(on: Boolean) = send("tway ${if (on) 1 else 0}")   // 2-way aktif mono, mode 2 (CAPS tway)
     fun setTwayHz(hz: Int) = send("tway_hz $hz")
     fun setSubloud(on: Boolean) = send("subloud ${if (on) 1 else 0}")        // loudness sub, mode 2 (CAPS subloud)
+    fun setSubloudPhone(on: Boolean) = send("subloud_phone ${if (on) 1 else 0}")   // ikut volume ponsel (AVRCP)
     fun setSubloudCfg(db10: Int, lo: Int, hi: Int) = send("subloud_cfg $db10 $lo $hi")
+    fun setPbass(on: Boolean) = send("pbass ${if (on) 1 else 0}")            // psychoacoustic bass, semua mode (CAPS pbass)
+    fun setPbassCfg(amount: Int, fc: Int) = send("pbass_cfg $amount $fc")
     fun setGain(g: Int) = send("gain $g")
     fun setAmp(s: String) = send("ampstate $s")
     fun setEq(on: Boolean) = send(if (on) "eq on" else "eq off")
@@ -403,7 +406,7 @@ class SppClient(private val context: Context) {
         }
         val lockEq = mode != 0          // eq off & band 0..2 ditolak saat crossover aktif
         val hp = p.xover; val lp = p.xoverLp ?: p.xover
-        if (hp != st.xover || lp != st.xoverLp || mode != st.mode) {
+        if (mode != 5 && mode != 6 && (hp != st.xover || lp != st.xoverLp || mode != st.mode)) {   // mode 5: crossover = tway_hz, xover ditolak firmware
             // Firmware tanpa xover2 (atau HPF = LPF): satu perintah; selain itu terpisah
             if (!st.hasXover2 || hp == lp) setXover(hp) else { setXoverHp(hp); setXoverLp(lp) }
         }
@@ -413,7 +416,7 @@ class SppClient(private val context: Context) {
         if (mode == 3) setCtr(p.ctr)
         setGain(p.gain)
         if (!lockEq || p.eqOn) setEq(p.eqOn)
-        if (mode != 2) {                // mode 2: mixer dikunci
+        if (mode != 2 && mode != 5 && mode != 6) {   // mode 2, 5, 6: mixer dikunci
             setMixer("ll", p.ll); setMixer("lr", p.lr)
             setMixer("rl", p.rl); setMixer("rr", p.rr)
         }
