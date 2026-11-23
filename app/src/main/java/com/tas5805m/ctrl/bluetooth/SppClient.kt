@@ -436,9 +436,28 @@ class SppClient(private val context: Context) {
             p.trim?.let { wsubTrim(it) }
             p.voice?.let { if (st2.hasVoice) setVoice(it) }
         }
+        applyBassFx(p, mode)
         delay(100)
         requestStatus()
         requestEqDump()
+    }
+
+    /**
+     * Subloud + Psychoacoustic Bass dari preset. Urutan: konfigurasi dulu, baru on/off (agar efek tidak sempat menyala dengan nilai lama).
+     * Dilewati bila firmware tidak mengiklankan CAPS-nya; subloud juga dilewati di mode 0/5 (firmware: `ERR subloud mode`).
+     * `phone` hanya dikirim ke firmware yang melaporkan `eff=` (≥ 2.9.26/27).
+     */
+    private suspend fun applyBassFx(p: Preset, mode: Int) {
+        val st = _state.value
+        p.pbass?.takeIf { st.hasPbass }?.let {
+            setPbassCfg(it.amt, it.fc); delay(40)
+            setPbass(it.on); delay(40)
+        }
+        p.subloud?.takeIf { st.hasSubloud && PresetTools.subloudApplies(mode) }?.let {
+            setSubloudCfg(it.db10, it.lo, it.hi); delay(40)
+            if (it.phone != null && st.subloudEff >= 0) { setSubloudPhone(it.phone); delay(40) }
+            setSubloud(it.on); delay(40)
+        }
     }
 
     /** Kirim band EQ (L/R atau linked); band 0..2 dilewati saat crossover aktif (mode ≠ 0). */
@@ -481,6 +500,7 @@ class SppClient(private val context: Context) {
         if (mode == 0 || p.eqOn) setEq(p.eqOn)
         sendEqBands(p, mode)
         if (st.hasWsub && st.hasVoice) p.voice?.let { setVoice(it); delay(60) }
+        applyBassFx(p, mode)
         delay(100)
         requestStatus()
         requestEqDump()
