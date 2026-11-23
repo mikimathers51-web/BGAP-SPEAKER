@@ -25,6 +25,8 @@ private fun describe(p: Preset): String = when (p.kind) {
     else -> buildString {
         append("Mode ${p.mode} · Xover ${p.xover} Hz · Master ${p.master}")
         if (p.voice != null) append(" · voicing")
+        p.subloud?.let { if (it.on) append(" · subloud") }
+        p.pbass?.let { if (it.on) append(" · pbass") }
         if (p.clip != null) append(" · clipper")
         if (p.trim != null) append(" · trim ${p.trim}")
     }
