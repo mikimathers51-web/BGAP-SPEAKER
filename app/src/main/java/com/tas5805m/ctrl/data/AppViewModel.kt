@@ -125,6 +125,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val builtinPresets: List<Preset> = BuiltinPresets.all
 
+    /** Subloud saat ini; null bila firmware tak punya fitur atau mode 0/5 (firmware menolak `subloud` di sana). */
+    private fun captureSubloud(s: AmpState): SubloudParams? =
+        if (s.hasSubloud && PresetTools.subloudApplies(s.mode))
+            SubloudParams(s.subloud, s.subloudDb10, s.subloudLo, s.subloudHi, phone = if (s.subloudEff >= 0) s.subloudPhone else null)
+        else null
+
+    private fun capturePbass(s: AmpState): PbassParams? =
+        if (s.hasPbass) PbassParams(s.pbass, s.pbassAmt, s.pbassFc) else null
+
     fun savePreset(name: String) {
         val s = state.value
         val clip = listOf("gain", "ml", "mr").map { s.tagInt("CLIP", it) }
@@ -144,6 +153,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             voice = if (s.hasWsub && s.hasVoice) s.voice else null,
             eqCtr = if (s.mode == 3 && s.hasEqc) s.eqCtr else null,
             eqSub = if (s.mode == 3 && s.hasEqc) s.eqSub else null,
+            subloud = captureSubloud(s),
+            pbass = capturePbass(s),
         )
         viewModelScope.launch { presetRepo.add(p) }
     }
@@ -157,6 +168,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             eqOn = s.eqOn, eqLeft = s.eqLeft, eqRight = s.eqRight,
             created = java.time.Instant.now().toString(),
             voice = if (s.hasWsub && s.hasVoice) s.voice else null,
+            subloud = captureSubloud(s),
+            pbass = capturePbass(s),
         )
         viewModelScope.launch { presetRepo.add(p) }
     }

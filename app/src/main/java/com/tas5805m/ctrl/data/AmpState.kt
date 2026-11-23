@@ -257,6 +257,22 @@ data class VoiceParams(
     fun command() = "wsub_voice ${if (on) 1 else 0} $hpf $pkHz $pkDb10 $pkQ10 0 100"
 }
 
+/** Loudness sub (firmware CAPS `subloud`, mode 1..4): `subloud_cfg <db10> <lo> <hi>`, `subloud_phone`, `subloud 0|1`. */
+data class SubloudParams(
+    val on: Boolean = false,
+    val db10: Int = 60,    // boost maks, dB×10 (0..60)
+    val lo: Int = 30,      // master ≤ lo → boost penuh (0..99)
+    val hi: Int = 70,      // master ≥ hi → 0 dB (lo+1..100)
+    val phone: Boolean? = null,   // ikut volume ponsel (firmware ≥ 2.9.26); null = tidak diubah
+)
+
+/** Psychoacoustic bass (firmware CAPS `pbass`, semua mode): `pbass_cfg <amt> <fc>`, `pbass 0|1`. */
+data class PbassParams(
+    val on: Boolean = false,
+    val amt: Int = 40,     // 0..100
+    val fc: Int = 80,      // 40..150 Hz
+)
+
 private val FAULT_BITS = listOf("OC-L", "OC-R", "DC-L", "DC-R", "UV", "OV", "CLK", "BQ", "CRC", "OT-SD", "OT-W")
 
 /** Decode bitmask fault slave (bit n = oc_l, oc_r, dc_l, dc_r, uv, ov, clk, bq, crc, ot_sd, ot_w). */
@@ -297,4 +313,7 @@ data class Preset(
     val voice: VoiceParams? = null,
     val eqCtr: List<Float>? = null,
     val eqSub: List<Float>? = null,
+    // --- efek bass yang ikut tersimpan (null = preset lama / firmware tanpa fitur → tidak diubah saat diterapkan) ---
+    val subloud: SubloudParams? = null,
+    val pbass: PbassParams? = null,
 )

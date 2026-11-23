@@ -36,6 +36,15 @@ object PresetJson {
         p.trim?.let { put("trim", it) }
         p.eqCtr?.let { put("eqCtr", JSONArray(it.map { v -> v.toDouble() })) }
         p.eqSub?.let { put("eqSub", JSONArray(it.map { v -> v.toDouble() })) }
+        p.subloud?.let { v ->
+            put("subloud", JSONObject().apply {
+                put("on", v.on); put("db10", v.db10); put("lo", v.lo); put("hi", v.hi)
+                v.phone?.let { put("phone", it) }
+            })
+        }
+        p.pbass?.let { v ->
+            put("pbass", JSONObject().apply { put("on", v.on); put("amt", v.amt); put("fc", v.fc) })
+        }
         p.voice?.let { v ->
             put("voice", JSONObject().apply {
                 put("on", v.on); put("hpf", v.hpf); put("pkHz", v.pkHz); put("pkDb10", v.pkDb10)
@@ -77,6 +86,18 @@ object PresetJson {
                 limit = v.optInt("limit", 100),
             )
         }
+        val subloud = o.optJSONObject("subloud")?.let { v ->
+            SubloudParams(
+                on = v.optBoolean("on", false),
+                db10 = v.optInt("db10", 60),
+                lo = v.optInt("lo", 30),
+                hi = v.optInt("hi", 70),
+                phone = if (v.has("phone") && !v.isNull("phone")) v.optBoolean("phone") else null,
+            )
+        }
+        val pbass = o.optJSONObject("pbass")?.let { v ->
+            PbassParams(on = v.optBoolean("on", false), amt = v.optInt("amt", 40), fc = v.optInt("fc", 80))
+        }
         return PresetTools.sanitize(Preset(
             id = o.optString("id").ifBlank { legacyId(o, index) },
             name = o.optString("name"),
@@ -105,6 +126,8 @@ object PresetJson {
             voice = voice,
             eqCtr = floats(o, "eqCtr"),
             eqSub = floats(o, "eqSub"),
+            subloud = subloud,
+            pbass = pbass,
         ))
     }
 }

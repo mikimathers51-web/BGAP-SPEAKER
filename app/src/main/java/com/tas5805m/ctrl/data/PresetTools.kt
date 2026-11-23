@@ -33,6 +33,16 @@ object PresetTools {
         limit = 100,
     )
 
+    private fun clampSubloud(v: SubloudParams): SubloudParams {
+        val lo = v.lo.coerceIn(0, 99)
+        return v.copy(db10 = v.db10.coerceIn(0, 60), lo = lo, hi = v.hi.coerceIn(lo + 1, 100))
+    }
+
+    private fun clampPbass(v: PbassParams) = v.copy(amt = v.amt.coerceIn(0, 100), fc = v.fc.coerceIn(40, 150))
+
+    /** Subloud hanya berlaku di mode 1..4 (firmware: mode 0 dan 5 → `ERR subloud mode`). */
+    fun subloudApplies(mode: Int): Boolean = mode != 0 && mode != 5
+
     /** Samakan semua nilai dengan rentang yang diterima firmware; JSON hasil impor tidak dipercaya apa adanya. */
     fun sanitize(p: Preset): Preset = p.copy(
         name = p.name.trim().take(MAX_NAME),
@@ -55,6 +65,8 @@ object PresetTools {
         voice = p.voice?.let { clampVoice(it) },
         eqCtr = p.eqCtr?.let { eq15(it) },
         eqSub = p.eqSub?.let { eq15(it) },
+        subloud = p.subloud?.let { clampSubloud(it) },
+        pbass = p.pbass?.let { clampPbass(it) },
     )
 
     /** Band yang benar-benar dikirim untuk `mode` (mode ≠ 0 melewati band 0..2). */
@@ -79,6 +91,8 @@ object PresetTools {
         if (hasSkippedEffect(p, mode)) parts += "Band 20/32/50 Hz dilewati saat crossover aktif — sebagian efek bass tidak diterapkan (atur bass lewat voicing sub)."
         val boost = maxBoostDb(p, mode)
         if (boost >= 4) parts += "Boost maks +$boost dB: bila terdengar pecah, turunkan Master ±$boost dB (EQ chip tanpa preamp)."
+        val sl = p.subloud
+        if (sl != null && sl.on && !subloudApplies(mode)) parts += "Subloud tidak berlaku di mode $mode (hanya mode 1–4) — pengaturan itu dilewati."
         val v = p.voice
         if (v != null && v.on && v.pkDb10 > 40) parts += "Peak sub +${v.pkDb10 / 10f} dB tanpa limiter: batasi ≤ +4 dB."
         return if (parts.isEmpty()) null else parts.joinToString(" ")
