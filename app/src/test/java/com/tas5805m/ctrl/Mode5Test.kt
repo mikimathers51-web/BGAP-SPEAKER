@@ -45,7 +45,7 @@ class Mode5Test {
 
     @Test fun presetSanitize_keepsMode5() {
         assertEquals(5, PresetTools.sanitize(Preset(name = "x", mode = 5)).mode)
-        assertEquals(5, PresetTools.sanitize(Preset(name = "x", mode = 9)).mode)   // dijepit ke batas atas
+        assertEquals(6, PresetTools.sanitize(Preset(name = "x", mode = 9)).mode)   // dijepit ke batas atas (mode 6)
     }
 
     // ---- mode 6: 1 chip mono 2-way ----

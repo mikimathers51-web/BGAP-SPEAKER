@@ -58,7 +58,7 @@ class PresetToolsTest {
         val p = PresetTools.sanitize(raw)
         assertEquals(PresetTools.MAX_NAME, p.name.length)
         assertEquals("full", p.kind)
-        assertEquals(4, p.mode); assertEquals(60, p.xover); assertEquals(100, p.master); assertEquals(31, p.gain)
+        assertEquals(6, p.mode); assertEquals(60, p.xover); assertEquals(100, p.master); assertEquals(31, p.gain)
         assertEquals(15f, p.eqLeft[0]); assertEquals(0f, p.eqLeft[1]); assertEquals(15, p.eqRight.size)
         assertEquals(-15f, p.eqRight[0]); assertEquals(0f, p.eqRight[10])
         assertEquals(1f, p.ll); assertEquals(2f, p.lr)
